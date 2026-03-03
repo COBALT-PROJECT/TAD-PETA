@@ -1,0 +1,6 @@
+services:
+# database definition service will be here
+  web-server:
+    build: .
+    ports:
+      - "8000:8000"     

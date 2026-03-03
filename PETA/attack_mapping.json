@@ -1,0 +1,32 @@
+{
+    "Denial_of_Service": {
+        "ATT_CK_Name": "Network Denial of Service: Reflection Amplification",
+        "ATT_ID": "T1498.002",
+        "Default_Mitigation_ID": "M1037",
+        "Contexts": {
+            "Frontend": {
+                "Mitigation_ID": "M1037",
+                "Action": "Enable Rate Limiting & Scrubbing"
+            },
+            "LoadBalancer": {
+                "Mitigation_ID": "M1037",
+                "Action": "Distribute Traffic / Blackhole Source"
+            }
+        }
+    },
+    "SQL_Injection": {
+        "ATT_CK_Name": "Exploit Public-Facing Application",
+        "ATT_ID": "T1190",
+        "Default_Mitigation_ID": "M1050",
+        "Contexts": {
+            "Frontend": {
+                "Mitigation_ID": "M1050",
+                "Action": "Update WAF Input Filters"
+            },
+            "Database": {
+                "Mitigation_ID": "M1050",
+                "Action": "Terminate SQL Session & Isolate DB Link"
+            }
+        }
+    }
+}

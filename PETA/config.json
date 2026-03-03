@@ -1,0 +1,9 @@
+{
+    "KB_mitigation_url": "http://localhost",
+    "KB_mitigation_port": 8080,
+    
+    "sandbox_output_url": "http://localhost",
+    "sandbox_output_port": 5000, 
+    "sandbox_endpoint":"fetch_xml" 
+    
+}

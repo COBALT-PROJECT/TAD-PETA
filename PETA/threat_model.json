@@ -1,0 +1,50 @@
+{
+    "ThreatModel": {
+        "Id": "tm_8b2c65n3dr87345s54gd746b7h83t82k",
+        "Metadata": {
+            "Timestamp": "2024-04-28T19:21:44.613Z",
+            "Source": "Internet",
+            "Targeted_Asset": "node-db-01"
+        },
+        "CyberAttack": {
+            "Type": "SQL_Injection",
+            "MITRE": {
+                "Name": "Exploit Public-Facing Application",
+                "ID": "T1190"
+            }
+        },
+        "OrganizationAssets": {
+            "Nodes": [
+                {
+                    "Id": "node-web-01",
+                    "Name": "Front",
+                    "Type": "Frontend",
+                    "IP": "10.0.0.1"
+                },
+                {
+                    "Id": "node-db-01",
+                    "Name": "DB",
+                    "Type": "Database",
+                    "IP": "10.0.0.2"
+                }
+            ],
+            "Links": [
+                {
+                    "Source": "node-web-01",
+                    "Target": "node-db-01",
+                    "Type": "VLAN"
+                }
+            ]
+        },
+        "ControlAction": {
+            "MitigationAction": {
+                "Methods": [
+                    "Terminate SQL Session & Isolate DB Link",
+                    "filter_network_traffic"
+                ],
+                "MITRE_ID": "M1050",
+                "Context_Applied": "Database"
+            }
+        }
+    }
+}
