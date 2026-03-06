@@ -1,32 +1,71 @@
 {
     "Denial_of_Service": {
-        "ATT_CK_Name": "Network Denial of Service: Reflection Amplification",
-        "ATT_ID": "T1498.002",
-        "Default_Mitigation_ID": "M1037",
-        "Contexts": {
-            "Frontend": {
-                "Mitigation_ID": "M1037",
-                "Action": "Enable Rate Limiting & Scrubbing"
-            },
-            "LoadBalancer": {
-                "Mitigation_ID": "M1037",
-                "Action": "Distribute Traffic / Blackhole Source"
-            }
+        "att_ck_name": "Network Denial of Service: Reflection Amplification",
+        "att_id": "T1498.002",
+        "contexts": {
+            "Frontend": [
+                {
+                    "mitigation_id": "M1037.1",
+                    "description": "Rate Limit Traffic at WAF",
+                    "action": "waf --set rate_limit_req_per_sec=10",
+                    "impact_level": "Low",
+                    "effectiveness": "Medium"
+                },
+                {
+                    "mitigation_id": "M1037.2",
+                    "description": "Enable Upstream Scrubbing",
+                    "action": "api.cdn.provider/scrubbing=enable",
+                    "impact_level": "Medium",
+                    "effectiveness": "High"
+                }
+            ],
+            "Database": [
+                {
+                    "mitigation_id": "M1037.3",
+                    "description": "Blackhole Source IP at Firewall",
+                    "action": "iptables -A INPUT -s $SOURCE_IP -j DROP",
+                    "impact_level": "High",
+                    "effectiveness": "High"
+                }
+            ]
         }
     },
     "SQL_Injection": {
-        "ATT_CK_Name": "Exploit Public-Facing Application",
-        "ATT_ID": "T1190",
-        "Default_Mitigation_ID": "M1050",
-        "Contexts": {
-            "Frontend": {
-                "Mitigation_ID": "M1050",
-                "Action": "Update WAF Input Filters"
-            },
-            "Database": {
-                "Mitigation_ID": "M1050",
-                "Action": "Terminate SQL Session & Isolate DB Link"
-            }
+        "att_ck_name": "Exploit Public-Facing Application",
+        "att_id": "T1190",
+        "contexts": {
+            "Frontend": [
+                {
+                    "mitigation_id": "M1050.1",
+                    "description": "Update WAF Input Filters (Block SQL Payload)",
+                    "action": "waf --enable-rule SQLI_BLOCK",
+                    "impact_level": "Low",
+                    "effectiveness": "High"
+                },
+                {
+                    "mitigation_id": "M1050.2",
+                    "description": "Temporarily Isolate Frontend",
+                    "action": "kubectl scale deployment frontend --replicas=0",
+                    "impact_level": "Critical",
+                    "effectiveness": "High"
+                }
+            ],
+            "Database": [
+                {
+                    "mitigation_id": "M1050.3",
+                    "description": "Terminate Active DB Sessions from Affected Pod",
+                    "action": "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE client_addr = '$POD_IP';",
+                    "impact_level": "High",
+                    "effectiveness": "Medium"
+                },
+                {
+                    "mitigation_id": "M1050.4",
+                    "description": "Enforce SSL Only and Drop Unencrypted Connections",
+                    "action": "postgres --ssl=on --require-secure-transport",
+                    "impact_level": "Medium",
+                    "effectiveness": "Low"
+                }
+            ]
         }
     }
 }

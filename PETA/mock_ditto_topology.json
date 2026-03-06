@@ -1,0 +1,122 @@
+[
+    {
+        "thingId": "upc.craax.resource:web-frontend-pod-01",
+        "policyId": "upc.craax.resource:web-policy",
+        "attributes": {
+            "type": "Container",
+            "platform": "Kubernetes",
+            "criticality": 8,
+            "role": "Frontend Web Server"
+        },
+        "features": {
+            "network": {
+                "properties": {
+                    "ip_address": "10.244.1.5",
+                    "open_ports": [
+                        80,
+                        443
+                    ]
+                }
+            },
+            "endpoints": {
+                "properties": {
+                    "monitored_paths": [
+                        "/api/login",
+                        "/api/data",
+                        "/checkout"
+                    ]
+                }
+            },
+            "security_controls": {
+                "properties": {
+                    "waf_enabled": true,
+                    "rate_limit_req_per_sec": 100
+                },
+                "desiredProperties": {}
+            },
+            "connections": {
+                "properties": {
+                    "connected_to": [
+                        "upc.craax.resource:auth-service-vm-01",
+                        "upc.craax.resource:postgres-db-pod-01"
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "thingId": "upc.craax.resource:auth-service-vm-01",
+        "policyId": "upc.craax.resource:backend-policy",
+        "attributes": {
+            "type": "VM",
+            "platform": "vSphere",
+            "criticality": 10,
+            "role": "Authentication Service"
+        },
+        "features": {
+            "network": {
+                "properties": {
+                    "ip_address": "192.168.10.50",
+                    "open_ports": [
+                        8080,
+                        22
+                    ]
+                }
+            },
+            "endpoints": {
+                "properties": {
+                    "monitored_paths": [
+                        "/auth/token",
+                        "/auth/verify"
+                    ]
+                }
+            },
+            "security_controls": {
+                "properties": {
+                    "iptables_default_policy": "DROP",
+                    "active_sessions_limit": 5000
+                },
+                "desiredProperties": {}
+            },
+            "connections": {
+                "properties": {
+                    "connected_to": [
+                        "upc.craax.resource:postgres-db-pod-01"
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "thingId": "upc.craax.resource:postgres-db-pod-01",
+        "policyId": "upc.craax.resource:db-policy",
+        "attributes": {
+            "type": "Pod",
+            "platform": "Kubernetes",
+            "criticality": 10,
+            "role": "Primary Database"
+        },
+        "features": {
+            "network": {
+                "properties": {
+                    "ip_address": "10.244.2.10",
+                    "open_ports": [
+                        5432
+                    ]
+                }
+            },
+            "endpoints": {
+                "properties": {
+                    "monitored_paths": []
+                }
+            },
+            "security_controls": {
+                "properties": {
+                    "connection_pool_limit": 100,
+                    "ssl_required": true
+                },
+                "desiredProperties": {}
+            }
+        }
+    }
+]

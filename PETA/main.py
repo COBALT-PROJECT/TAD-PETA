@@ -55,24 +55,24 @@ app = FastAPI()
 @app.post("/json-scheme/")
 def create_threat_model(cyber_attack: dict): 
     # Extract Attack Info
-    attack_data = cyber_attack.get("CyberAttack", {})
-    attack_type = attack_data.get("Type", "Unknown")
-    target_asset_id = attack_data.get("Target_Asset_Id") # New: Extract the pointer
+    attack_data = cyber_attack.get("cyber_attack", {})
+    attack_type = attack_data.get("type", "Unknown")
+    target_asset_id = attack_data.get("targeted_asset") # New: Extract the pointer
     
-    vector = attack_data.get("Vector", {})
+    vector = attack_data.get("vector", {})
     timestamp = vector.get("attack_timestamp")
     location = vector.get("attack_location")
     
     # Extract Topology Info
-    assets_data = cyber_attack.get("OrganizationAssets", {})
-    topology = assets_data.get("Topology")
+    assets_data = cyber_attack.get("organization_assets", {})
+    topology = assets_data.get("topology")
     
     if topology:
-        nodes = topology.get("Nodes", [])
-        links = topology.get("Links", [])
+        nodes = topology.get("nodes", [])
+        links = topology.get("links", [])
     else:
         # Fallback to single asset
-        nodes = [{"Id": Asset_ID, "Name": Asset_Name, "Type": Asset_Type, "IP": vector.get("Asset_IPAddress", "0.0.0.0")}]
+        nodes = [{"id": Asset_ID, "name": Asset_Name, "type": Asset_Type, "ip": vector.get("asset_ip_address", "0.0.0.0")}]
         links = []
         target_asset_id = Asset_ID
 

@@ -1,49 +1,61 @@
 {
-    "ThreatModel": {
-        "Id": "tm_8b2c65n3dr87345s54gd746b7h83t82k",
-        "Metadata": {
-            "Timestamp": "2024-04-28T19:21:44.613Z",
-            "Source": "Internet",
-            "Targeted_Asset": "node-db-01"
+    "threat_model": {
+        "id": "tm_8b2c65n3dr87345s54gd746b7h83t82k",
+        "metadata": {
+            "timestamp": "2024-06-01T12:00:00Z",
+            "source": "Internet",
+            "targeted_asset": "upc.craax.resource:postgres-db-pod-01"
         },
-        "CyberAttack": {
-            "Type": "SQL_Injection",
-            "MITRE": {
-                "Name": "Exploit Public-Facing Application",
-                "ID": "T1190"
+        "cyber_attack": {
+            "type": "SQL_Injection",
+            "mitre": {
+                "name": "Exploit Public-Facing Application",
+                "id": "T1190"
             }
         },
-        "OrganizationAssets": {
-            "Nodes": [
+        "organization_assets": {
+            "nodes": [
                 {
-                    "Id": "node-web-01",
-                    "Name": "Front",
-                    "Type": "Frontend",
-                    "IP": "10.0.0.1"
+                    "id": "upc.craax.resource:web-frontend-pod-01",
+                    "name": "Frontend Web Server (Container)",
+                    "type": "Frontend",
+                    "ip": "10.244.1.5",
+                    "criticality": 8
                 },
                 {
-                    "Id": "node-db-01",
-                    "Name": "DB",
-                    "Type": "Database",
-                    "IP": "10.0.0.2"
+                    "id": "upc.craax.resource:auth-service-vm-01",
+                    "name": "Authentication Service (VM)",
+                    "type": "Unknown",
+                    "ip": "192.168.10.50",
+                    "criticality": 10
+                },
+                {
+                    "id": "upc.craax.resource:postgres-db-pod-01",
+                    "name": "Primary Database (Pod)",
+                    "type": "Database",
+                    "ip": "10.244.2.10",
+                    "criticality": 10
                 }
             ],
-            "Links": [
-                {
-                    "Source": "node-web-01",
-                    "Target": "node-db-01",
-                    "Type": "VLAN"
-                }
-            ]
+            "links": []
         },
-        "ControlAction": {
-            "MitigationAction": {
-                "Methods": [
-                    "Terminate SQL Session & Isolate DB Link",
-                    "filter_network_traffic"
+        "control_action": {
+            "mitigation_action": {
+                "methods": [
+                    "Terminate Active DB Sessions from Affected Pod",
+                    "default_fw_rule"
                 ],
-                "MITRE_ID": "M1050",
-                "Context_Applied": "Database"
+                "mitre_id": "M1050.3",
+                "context_applied": "Database",
+                "selected_mitigation": {
+                    "mitigation_id": "M1050.3",
+                    "description": "Terminate Active DB Sessions from Affected Pod",
+                    "action": "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE client_addr = '$POD_IP';",
+                    "impact_level": "High",
+                    "effectiveness": "Medium",
+                    "_calculated_score": 90.0,
+                    "_target_node_id": "upc.craax.resource:postgres-db-pod-01"
+                }
             }
         }
     }
