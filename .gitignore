@@ -5,7 +5,8 @@ __pycache__/
 
 # C extensions
 *.so
-
+TAD/
+VM_Agents/
 # Distribution / packaging
 # .Python
 # build/

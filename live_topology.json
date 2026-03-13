@@ -1,0 +1,61 @@
+[
+    {
+        "thingId": "upc.craax.resource:vm-auto",
+        "policyId": "upc.craax.resource:vm-auto-policy",
+        "attributes": {
+            "type": "VirtualMachine",
+            "platform": "Linux VM",
+            "criticality": 7,
+            "role": "Frontend Web Server"
+        },
+        "features": {
+            "network": {
+                "properties": {
+                    "ip_address": "10.0.0.41",
+                    "open_ports": [
+                        41603,
+                        7687,
+                        40199,
+                        27017,
+                        8080,
+                        8081,
+                        22,
+                        15766,
+                        45469,
+                        36641,
+                        3629,
+                        44465,
+                        7474,
+                        53,
+                        8890,
+                        8000,
+                        8001,
+                        42823,
+                        34375,
+                        1111,
+                        37483,
+                        35953,
+                        37877,
+                        631
+                    ]
+                }
+            },
+            "connections": {
+                "properties": {
+                    "connected_to": [
+                        "142.251.209.202",
+                        "216.239.38.223",
+                        "172.18.0.10",
+                        "192.178.25.106",
+                        "10.0.0.1",
+                        "142.251.140.234"
+                    ]
+                }
+            },
+            "security_controls": {
+                "properties": {},
+                "desiredProperties": {}
+            }
+        }
+    }
+]
