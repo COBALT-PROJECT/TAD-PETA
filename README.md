@@ -22,7 +22,7 @@ The pipeline supports two primary demonstration scenarios:
 
 ---
 
-## 🚀 Integrated Architecture (Online)
+## 🚀 Integrated Architecture (In-Lab demo)
 
 The online pipeline operates in a real-time feedback loop, moving from live discovery to automated remediation using a pure JSON data flow.
 
