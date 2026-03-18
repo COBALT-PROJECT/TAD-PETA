@@ -2,25 +2,46 @@
 
 This repository contains a unified, automated security pipeline for Eclipse Ditto Digital Twins, integrating **Threat Anomaly Detection (TAD)** and **Proactive Evaluation of Threat Actions (PETA)** via a standardized **Security Digital Twin (SDT) Service** middleware.
 
-## 🚀 The Integrated Architecture
+---
 
-The pipeline operates in a real-time feedback loop, moving from live discovery to automated remediation.
+## 🎮 Demonstration Workflows
+
+The pipeline supports two primary demonstration scenarios:
+
+### 1. Online Real-time Remediation (SDT-Topo)
+**Goal**: Live detection and automated enforcement on a running Digital Twin.
+- **Topology**: Dynamically fetched from **Eclipse Ditto** via the SDT Service.
+- **Enforcement**: Automated mitigation patches are pushed back to the Digital Twin's `desiredProperties`.
+- **Primary Endpoint**: `POST /sdt-topo/`
+
+### 2. Offline Forensic Analysis (Cobalt-Topo)
+**Goal**: Forensic evaluation of attacks against a static, pre-defined topology.
+- **Topology**: Loaded from a local `cobalt_topology.json` file.
+- **Enforcement**: Results are logged to a file for investigation; no changes are made to the live system.
+- **Primary Endpoint**: `POST /cobalt-topo/`
+
+---
+
+## 🚀 Integrated Architecture (Online)
+
+The online pipeline operates in a real-time feedback loop, moving from live discovery to automated remediation using a pure JSON data flow.
 
 ```mermaid
 graph TD
-    subgraph Target_Environment ["Target Environment"]
+    subgraph Target_Environment ["Target Infrastructure (Proxmox)"]
         VMs["Monitored VMs (10.0.0.40)"]
-        TE["topology_discover.py (Resource Discovery)"]
+        TE["topology_discover.py (Discovery)"]
     end
 
     subgraph Monitoring_Pipeline ["TAD: Detection Cluster"]
+        Kafka["Apache Kafka (Streaming)"]
         RM["realtime_monitor.py (ML Inference)"]
-        Kafka["Apache Kafka (Streaming Telemetry)"]
     end
 
     subgraph Intelligent_Remediation ["PETA: Mitigation Cluster"]
-        PA["PETA API (Scoring & Planning)"]
-        Adapt["adaptor.py (Context Mapping)"]
+        API["PETA API (/sdt-topo/)"]
+        Scoring["Scoring Engine (RF/Context)"]
+        Adapt["tad_adaptor.py (TAD Side)"]
     end
 
     subgraph Digital_Twin_Core ["Digital Twin Infrastructure"]
@@ -29,47 +50,40 @@ graph TD
     end
 
     %% Discovery Flow
-    TE -->|1. POST /api/SDT/create| SDT
-    SDT -->|Save Resource Thing| DT
+    TE -->|1. Discovery| SDT
+    SDT -->|Register Resource| DT
 
     %% Detection Flow
-    VMs -->|2. Telemetry Stream| Kafka
-    Kafka --> RM
+    VMs -->|2. Telemetry| Kafka
+    Kafka -->|Stream| RM
     
     %% Remediation Loop
     RM -->|3. Alert Detected| SDT
-    SDT -->|4. GET /api/SDT/read| RM
-    RM -->|5. Alert + Topology| Adapt
-    Adapt --> PA
-    PA -->|6. Mitigation Plan| Adapt
-    Adapt -->|7. PUT /api/SDT/update| SDT
-    SDT -->|8. Update Desired Properties| DT
+    SDT -->|4. Fetch Topology| RM
+    RM -->|5. Adaptor: Ditto to PETA| Adapt
+    Adapt -->|6. POST /sdt-topo/| API
+    API -->|Evaluate Mitigations| Scoring
+    Scoring -->|JSON Threat Model| API
+    API -->|7. Mitigation Plan| RM
+    RM -->|8. Adaptor: PETA to SDT Patch| Adapt
+    Adapt -->|9. PUT /api/SDT/update/| SDT
+    SDT -->|10. Enforce Desired State| DT
 ```
+
+---
 
 ## 🛠️ Key Components
 
 ### 1. Dynamic Topology Discovery (`VM_Agents/`)
-*   **[topology_discover.py](file:///home/abdul/DigitalTwin/TAD-PETA/VM_Agents/topology_discover.py)**: Scans VM network state and registers it as a **`Resource`** thing in the SDT Service. 
-*   **Feature Mapping**: Includes a placeholder `security_controls` feature in the Digital Twin, prepared for incoming automated patches.
+*   **[topology_discover.py](file:///home/abdul/DigitalTwin/TAD-PETA/VM_Agents/topology_discover.py)**: Scans active network connections via `psutil` to deduce node roles and linkages.
+*   **Security Controls**: Automatically initializes the `security_controls` feature in the Digital Twin.
 
 ### 2. Real-time Monitoring & Orchestration (`TAD/`)
-*   **[realtime_monitor.py](file:///home/abdul/DigitalTwin/TAD-PETA/TAD/scripts/realtime_monitor.py)**: The central brain. It performs ML inference on incoming telemetry and orchestrates the remediation loop via the SDT Service.
-*   **SDT Interaction**: Standardizes all GET/PUT operations to port **8001**, ensuring the `Resource` category is maintained across the pipeline.
+*   **[realtime_monitor.py](file:///home/abdul/DigitalTwin/TAD-PETA/TAD/scripts/realtime_monitor.py)**: The central orchestrator. It performs multi-class ML inference (DoS, Port Scan, Brute Force) on Kafka telemetry and manages the remediation loop.
+*   **[tad_adaptor.py](file:///home/abdul/DigitalTwin/TAD-PETA/TAD/scripts/tad_adaptor.py)**: The local data bridge that translates Ditto "Things" into PETA topologies and threat models into enforced state patches.
 
 ### 3. Smart Mitigation Planning (`PETA/`)
-*   **[PETA API](file:///home/abdul/DigitalTwin/TAD-PETA/PETA/main.py)**: Receives alerts and identifies the optimal mitigation through its scoring engine.
-*   **Desired State Mapping**: Mitigations are converted into **`desiredProperties`** for the `security_controls` feature, signaling a required change in the physical asset's configuration.
-
----
-
-## 📈 Future Roadmap
-
-Based on our **[Future Improvements Proposal](file:///home/abdul/.gemini/antigravity/brain/c44c4927-9cdd-4b88-8e43-4d93f49f0da0/improvement_proposal.md)**:
-
-1.  **Streaming Ingestion**: Fully transition from batch SCP fetching to high-throughput **Apache Kafka** streams for sub-second detection latency.
-2.  **Dynamic Labeling**: Integrate **Zeek** and **Suricata** logs to automatically label and retrain ML models based on passive signature matches.
-3.  **Reinforcement Learning**: Evolve the PETA scoring engine into an RL agent that learns the most effective mitigations for specific topologies over time.
-4.  **Autoencoders**: Implement unsupervised learning to detect "Zero-Day" anomalies that deviate from established behavioral baselines.
+*   **[PETA API](/PETA/main.py)**: A JSON-only threat modeling service. Its scoring engine evaluates mitigations based on **Effectiveness**, **Impact**, and host **Criticality**.
 
 ---
 
@@ -77,4 +91,4 @@ Based on our **[Future Improvements Proposal](file:///home/abdul/.gemini/antigra
 
 *   **[TAD Guide](./TAD/README.md)**: Details on data collection, feature extraction, and ML training.
 *   **[PETA Guide](./PETA/README.md)**: Details on the scoring engine, graph traversal, and mitigation mapping.
-*   **[Walkthrough Artifact](file:///home/abdul/.gemini/antigravity/brain/c44c4927-9cdd-4b88-8e43-4d93f49f0da0/walkthrough.md)**: A summary of the latest integration verification.
+*   **[Walkthrough Artifact](file:///home/abdul/.gemini/antigravity/brain/c44c4927-9cdd-4b88-8e43-4d93f49f0da0/walkthrough.md)**: Detailed verification logs for the unified integration.

@@ -14,37 +14,67 @@ The PETA prototype has been modernized from an XML-centric script into a pure JS
 
 PETA currently supports mapping and contextual mitigations for the following attack types:
 
-1.  **Denial of Service (DoS)**: Specialized for Network Denial of Service (T1498.002).
-2.  **SQL Injection**: Specialized for Exploit Public-Facing Application (T1190).
+1.  **Denial of Service (DoS / SYN_Flood)**: Specialized for Network Denial of Service (T1498.002).
+2.  **Port_Scan**: Specialized for Reconnaissance: Active Scanning (T1595).
+3.  **Brute_Force**: Specialized for Brute Force: Password Cracking (T1110.002).
+4.  **SQL Injection**: Specialized for Exploit Public-Facing Application (T1110).
 
-## Architecture and Flow
+## SDT-Topo Workflow (In-Lab Demo, SDT-based)
 
-The application uses an expanded JSON flow incorporating Eclipse Ditto integration:
+The **SDT-Topo** workflow is designed for in-lab demos where the **TAD (Threat Anomaly Detection)** system orchestrates real-time mitigation via its local `tad_adaptor.py`:
 
 ```mermaid
-graph TD
-    A[Eclipse Ditto JSON] -->|GET Thing JSON| B[adaptor.py: Ditto to PETA]
-    B -->|Standard JSON Topology| C[main.py: API Input]
-    C -->|Alert Info & Node Graph| E[threat_model.py: Context]
-    E -->|Look up mapped mitigations| F[attack_mapping.json]
-    F -.->|2-3 Technical Options per Attack| E
-    E -->|Context & Options| S[scoring_engine.py]
-    S -->|Evaluate Options against Criticality| S
-    S -->|Selected Mitigation| E
-    E -->|Generate Model| G[PETA JSON Threat Model]
-    G --> H[adaptor.py: PETA to Ditto]
-    H -->|Desired State PATCH| I[Eclipse Ditto Target Thing]
+sequenceDiagram
+    participant TAD as TAD Orchestrator
+    participant Ditto as SDT Service (Middleware)
+    participant PETA as PETA: /sdt-topo
+    participant Notification as Notification Service
+    
+
+    TAD->>Ditto: GET Current Resource Topology
+    Ditto-->>TAD: Thing JSON
+    TAD->>TAD: tad_adaptor: Ditto to PETA Topology
+    TAD->>PETA: POST /sdt-topo/ (Attack + PETA Topology)
+    PETA->>PETA: Dynamic Mitigation Scoring
+    PETA->>PETA: Threat Model: Compute full PETA threat model
+    PETA->>Notification: Send the notification to authorities and to user
+    PETA->>PETA: PETA_adaptor: PETA adaptor
+    PETA->>Ditto: PUT /api/SDT/update/
+```
+
+### Online Flow Steps:
+1.  **Attack Generation**: TAD generates cyber attack information based on monitored events (ML Inference).
+2.  **Topology Retrieval**: TAD uses **`tad_adaptor.py`** to fetch and convert the current topology state from the **SDT Service**.
+3.  **Analysis Request**: TAD calls the PETA `/sdt-topo/` endpoint with the attack info and the converted topology.
+4.  **Enforcement**: The result is translated into an SDT-specific patch by the local adaptor and pushed to the middleware.
+
+## Cobalt-Topo Workflow (Cobalt Framework based)
+```mermaid
+sequenceDiagram
+    participant TAD as TAD Orchestrator
+    participant Cobalt as Cobalt Framework (Topology)
+    participant PETA as PETA: /sdt-topo
+    participant Notification as Notification Service
+    
+
+    TAD->>Cobalt: GET Current Resource Topology
+    Cobalt-->>TAD: JSON Topology
+    TAD->>PETA: POST /cobalt-topo/ (Attack + PETA Topology)
+    PETA->>PETA: Dynamic Mitigation Scoring
+    PETA->>PETA: Threat Model: Compute full PETA threat model
+    PETA->>Notification: Send the notification to authorities and to user
+
 ```
 
 ### Key Components
 
 | File | Responsibility |
 | :--- | :--- |
-| [adaptor.py](file:///home/abdul/DigitalTwin/TAD-PETA/PETA/adaptor.py) | **Digital Twin Bridge**: Converts Ditto Things to PETA Topologies and Threat Models back to Ditto Patches. |
+| [adaptor.py](file:///home/abdul/DigitalTwin/TAD-PETA/PETA/adaptor.py) | **PETA Utility**: Contains helper functions for PETA-side JSON patching and format conversion. |
 | [scoring_engine.py](file:///home/abdul/DigitalTwin/TAD-PETA/PETA/scoring_engine.py) | **Evaluation Logic**: Weighs mitigation `Effectiveness` vs `ImpactLevel` against node `Criticality`. |
-| [main.py](file:///home/abdul/DigitalTwin/TAD-PETA/PETA/main.py) | **API Layer**: Exposes `/json-scheme/` and `/fetch-json-schema`. Excludes all XML dependencies. |
-| [threat_model.py](file:///home/abdul/DigitalTwin/TAD-PETA/PETA/threat_model.py) | **Modeling Layer**: Replaces `dos_scheme.py`. Builds the threat model as a standard dictionary. |
-| [attack_mapping.json](file:///home/abdul/DigitalTwin/TAD-PETA/PETA/attack_mapping.json) | **Mapping**: Stores the relationship between attack names, MITRE standards, and multiple mitigation options with actionable implementations. |
+| [main.py](file:///home/abdul/DigitalTwin/TAD-PETA/PETA/main.py) | **API Layer**: Exposes `/sdt-topo/` and `/cobalt-topo/` endpoints. |
+| [threat_model.py](file:///home/abdul/DigitalTwin/TAD-PETA/PETA/threat_model.py) | **Modeling Layer**: Builds the JSON threat model standard dictionary. |
+| [attack_mapping.json](file:///home/abdul/DigitalTwin/TAD-PETA/PETA/attack_mapping.json) | **Mapping**: Stores the relationship between TAD attack labels, MITRE ATT&CK standards, and multiple mitigation options. |
 
 ## Scoring Engine Upstream Analysis
 
@@ -92,7 +122,7 @@ PETA/
 Submit a JSON payload representing a cyber attack and your network topology:
 
 ```bash
-curl --location 'http://127.0.0.1:8000/json-scheme/' \
+curl --location 'http://127.0.0.1:8000/sdt-topo/' \
 --header 'Content-Type: application/json' \
 --data '{
     "cyber_attack": {
@@ -114,6 +144,26 @@ curl --location 'http://127.0.0.1:8000/json-scheme/' \
     }
 }'
 ```
+
+### Triggering Cobalt-Topo (Offline)
+
+Use the following to trigger the offline analysis using the `cobalt_topology.json` file:
+
+```bash
+curl --location 'http://127.0.0.1:8000/cobalt-topo/' \
+--header 'Content-Type: application/json' \
+--data '{
+    "cyber_attack": {
+        "type": "SQL_Injection",
+        "targeted_asset": "nc-pod-ditto",
+        "vector": {
+            "attack_timestamp": "2024-06-01T12:00:00Z",
+            "attack_location": "Internet"
+        }
+    }
+}'
+```
+
 
 The system will generate a JSON threat model evaluated by the scoring engine. You can fetch the latest build:
 ```json

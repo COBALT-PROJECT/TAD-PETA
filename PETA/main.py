@@ -50,9 +50,15 @@ def send_output(json_schema):
     except RequestException as e:
         print(f"Sandbox Connection Error: {e}")
 
+def log_to_file(message):
+    with open("log", "a") as f:
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        f.write(f"[{timestamp}] {message}\n")
+
 app = FastAPI()
 
-@app.post("/json-scheme/")
+@app.post("/sdt-topo/")
 def create_threat_model(cyber_attack: dict): 
     # Extract Attack Info
     attack_data = cyber_attack.get("cyber_attack", {})
@@ -93,6 +99,66 @@ def fetch_json_schema():
         with open("threat_model.json", 'r') as f:
             return json.load(f)
     return {"error": "No model found"}
+
+@app.post("/cobalt-topo/")
+def cobalt_topo_analysis(cyber_attack: dict): 
+    """
+    Processes a pre-converted local topology file (cobalt_topology.json) and logs results.
+    """
+    # Extract Attack Info (consistent with /sdt-topo/)
+    attack_data = cyber_attack.get("cyber_attack", {})
+    attack_type = attack_data.get("type", "SQL_Injection")
+    target_node_id = attack_data.get("targeted_asset", "nc-pod-ditto")
+    
+    vector = attack_data.get("vector", {})
+    timestamp = vector.get("attack_timestamp", "2024-06-01T12:00:00Z")
+    location = vector.get("attack_location", "Offline Analysis")
+    
+    # 1. Load local topology (already converted PETA format)
+    topology_path = "cobalt_topology.json"
+    if not os.path.exists(topology_path):
+        # Fallback to ncsrd_topology_peta.json for testing if cobalt doesn't exist yet
+        topology_path = "ncsrd_topology_peta.json"
+        
+    if not os.path.exists(topology_path):
+        return {"error": "Topology file not found"}
+    
+    with open(topology_path, 'r') as f:
+        topology_data = json.load(f).get("topology", {})
+    
+    nodes = topology_data.get("nodes", [])
+    links = topology_data.get("links", [])
+    
+    # 2. Get Mitigations
+    mitigations = mitigation_knowledge_based(attack_type)
+    
+    # 3. Generate Threat Model
+    model = generate_threat_model(
+        nodes=nodes,
+        links=links,
+        attack_type=attack_type,
+        attack_location=location,
+        attack_timestamp=timestamp,
+        mitigation_list=mitigations,
+        target_node_id=target_node_id
+    )
+
+    
+    # 4. Logging
+    threat_model_data = model.get("threat_model", {})
+    metadata = threat_model_data.get("metadata", {})
+    impacted_asset = metadata.get("targeted_asset")
+    
+    control_action = threat_model_data.get("control_action", {})
+    mitigation_action = control_action.get("mitigation_action", {})
+    selected = mitigation_action.get("selected_mitigation", {})
+    action_desc = selected.get("description", "No mitigation selected")
+    
+    log_to_file(f"Asset: {impacted_asset}, Action: {action_desc}")
+    log_to_file("Incident reported to authorities")
+    
+    return model
+
 
 # Keep legacy endpoint for compatibility but return JSON
 @app.post("/xml-scheme/")

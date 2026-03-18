@@ -2,36 +2,263 @@
     "threat_model": {
         "id": "tm_8b2c65n3dr87345s54gd746b7h83t82k",
         "metadata": {
-            "timestamp": null,
-            "source": null,
-            "targeted_asset": "1"
+            "timestamp": "2024-06-01T12:00:00Z",
+            "source": "Internet",
+            "targeted_asset": "nc-pod-sdt"
         },
         "cyber_attack": {
-            "type": "Denial_of_Service",
+            "type": "SQL_Injection",
             "mitre": {
-                "name": "Network Denial of Service: Reflection Amplification",
-                "id": "T1498.002"
+                "name": "Exploit Public-Facing Application",
+                "id": "T1190"
             }
         },
         "organization_assets": {
             "nodes": [
                 {
-                    "id": "1",
-                    "name": "Server",
-                    "type": "DNS Server",
-                    "ip": "0.0.0.0"
+                    "id": "nc-vm1",
+                    "name": "VM1",
+                    "type": "Frontend",
+                    "criticality": 8,
+                    "role": "K8s Worker Node 1",
+                    "ip": "10.0.10.1",
+                    "open_ports": [
+                        6443,
+                        8080
+                    ]
+                },
+                {
+                    "id": "nc-pod-sdt",
+                    "name": "SDT-Pod",
+                    "type": "Frontend",
+                    "criticality": 9,
+                    "role": "Security Digital Twin Service",
+                    "ip": "10.244.1.10",
+                    "parent_vm": "nc-vm1"
+                },
+                {
+                    "id": "nc-pod-ids",
+                    "name": "IDS-SDT-Pod",
+                    "type": "Frontend",
+                    "criticality": 7,
+                    "role": "IDS Integration Service",
+                    "ip": "10.244.1.11",
+                    "parent_vm": "nc-vm1"
+                },
+                {
+                    "id": "nc-pod-collector",
+                    "name": "Collector-Pod",
+                    "type": "Frontend",
+                    "criticality": 6,
+                    "role": "Evidence Collector",
+                    "ip": "10.244.1.12",
+                    "parent_vm": "nc-vm1"
+                },
+                {
+                    "id": "nc-pod-ditto",
+                    "name": "Ditto-Pod",
+                    "type": "Database",
+                    "criticality": 10,
+                    "role": "Eclipse Ditto (Digital Twin)",
+                    "ip": "10.244.1.13",
+                    "parent_vm": "nc-vm1"
+                },
+                {
+                    "id": "nc-vm2",
+                    "name": "VM2",
+                    "type": "Frontend",
+                    "criticality": 8,
+                    "role": "K8s Worker Node 2",
+                    "ip": "10.0.10.2",
+                    "open_ports": [
+                        6443
+                    ]
+                },
+                {
+                    "id": "nc-pod-sdt-manager",
+                    "name": "SDT-Manager-Pod",
+                    "type": "Frontend",
+                    "criticality": 9,
+                    "role": "K8s Cluster Controller",
+                    "ip": "10.244.2.5",
+                    "parent_vm": "nc-vm2"
+                },
+                {
+                    "id": "nc-vm3",
+                    "name": "VM3",
+                    "type": "Database",
+                    "criticality": 10,
+                    "role": "Orchestrator",
+                    "ip": "10.0.10.3",
+                    "open_ports": [
+                        9000,
+                        5432
+                    ]
+                },
+                {
+                    "id": "nc-vm4",
+                    "name": "VM4",
+                    "type": "Database",
+                    "criticality": 7,
+                    "role": "DRA",
+                    "ip": "10.0.10.4",
+                    "open_ports": [
+                        8000
+                    ]
+                },
+                {
+                    "id": "nc-vm5",
+                    "name": "VM5",
+                    "type": "Database",
+                    "criticality": 6,
+                    "role": "DLT",
+                    "ip": "10.0.10.5",
+                    "open_ports": [
+                        8000
+                    ]
+                },
+                {
+                    "id": "nc-vm6",
+                    "name": "VM6",
+                    "type": "Database",
+                    "criticality": 9,
+                    "role": "SSI",
+                    "ip": "10.0.10.6",
+                    "open_ports": [
+                        8000
+                    ]
+                },
+                {
+                    "id": "nc-vm7",
+                    "name": "VM7",
+                    "type": "Database",
+                    "criticality": 5,
+                    "role": "CCM Manager",
+                    "ip": "10.0.10.7",
+                    "open_ports": [
+                        8000
+                    ]
+                },
+                {
+                    "id": "nc-vm8",
+                    "name": "VM8",
+                    "type": "Database",
+                    "criticality": 4,
+                    "role": "Clouditor Assessment",
+                    "ip": "10.0.10.8",
+                    "open_ports": [
+                        8000
+                    ]
+                },
+                {
+                    "id": "nc-vm9",
+                    "name": "VM9",
+                    "type": "Database",
+                    "criticality": 5,
+                    "role": "Security Analysis Host",
+                    "ip": "10.0.10.9",
+                    "open_ports": [
+                        8000,
+                        8001
+                    ]
+                },
+                {
+                    "id": "nc-cont-tad",
+                    "name": "TAD-Container",
+                    "type": "Frontend",
+                    "criticality": 7,
+                    "role": "Threat Anomaly Detection",
+                    "parent_vm": "nc-vm9"
+                },
+                {
+                    "id": "nc-cont-peta",
+                    "name": "PETA-Container",
+                    "type": "Frontend",
+                    "criticality": 8,
+                    "role": "Proactive Evaluation of Threat Actions",
+                    "parent_vm": "nc-vm9"
                 }
             ],
-            "links": []
+            "links": [
+                {
+                    "source": "nc-pod-sdt",
+                    "target": "nc-vm1"
+                },
+                {
+                    "source": "nc-pod-ids",
+                    "target": "nc-vm1"
+                },
+                {
+                    "source": "nc-pod-collector",
+                    "target": "nc-vm1"
+                },
+                {
+                    "source": "nc-pod-ditto",
+                    "target": "nc-vm1"
+                },
+                {
+                    "source": "nc-pod-sdt-manager",
+                    "target": "nc-vm2"
+                },
+                {
+                    "source": "nc-cont-tad",
+                    "target": "nc-vm9"
+                },
+                {
+                    "source": "nc-cont-peta",
+                    "target": "nc-vm9"
+                },
+                {
+                    "source": "nc-pod-sdt",
+                    "target": "nc-pod-ditto"
+                },
+                {
+                    "source": "nc-pod-ids",
+                    "target": "nc-pod-sdt"
+                },
+                {
+                    "source": "nc-vm1",
+                    "target": "nc-vm3"
+                },
+                {
+                    "source": "nc-vm2",
+                    "target": "nc-vm3"
+                },
+                {
+                    "source": "nc-vm3",
+                    "target": "nc-vm4"
+                },
+                {
+                    "source": "nc-vm4",
+                    "target": "nc-vm5"
+                },
+                {
+                    "source": "nc-vm5",
+                    "target": "nc-vm6"
+                },
+                {
+                    "source": "nc-cont-tad",
+                    "target": "nc-cont-peta"
+                }
+            ]
         },
         "control_action": {
             "mitigation_action": {
                 "methods": [
+                    "Update WAF Input Filters (Block SQL Payload)",
                     "filter_network_traffic"
                 ],
-                "mitre_id": "M1037",
-                "context_applied": "None",
-                "selected_mitigation": {}
+                "mitre_id": "M1050.1",
+                "context_applied": "Frontend",
+                "selected_mitigation": {
+                    "mitigation_id": "M1050.1",
+                    "description": "Update WAF Input Filters (Block SQL Payload)",
+                    "action": "waf --enable-rule SQLI_BLOCK",
+                    "impact_level": "Low",
+                    "effectiveness": "High",
+                    "_calculated_score": 170,
+                    "_target_node_id": "nc-pod-sdt"
+                }
             }
         }
     }

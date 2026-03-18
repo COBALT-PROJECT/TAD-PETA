@@ -67,5 +67,77 @@
                 }
             ]
         }
+    },
+    "Port_Scan": {
+        "att_ck_name": "Reconnaissance: Active Scanning",
+        "att_id": "T1595",
+        "contexts": {
+            "Frontend": [
+                {
+                    "mitigation_id": "M1037.4",
+                    "description": "Block Scanning IP at Firewall",
+                    "action": "iptables -A INPUT -s $SOURCE_IP -j DROP",
+                    "impact_level": "Low",
+                    "effectiveness": "High"
+                }
+            ],
+            "Database": [
+                {
+                    "mitigation_id": "M1037.4",
+                    "description": "Block Scanning IP at Firewall",
+                    "action": "iptables -A INPUT -s $SOURCE_IP -j DROP",
+                    "impact_level": "Low",
+                    "effectiveness": "High"
+                }
+            ]
+        }
+    },
+    "Brute_Force": {
+        "att_ck_name": "Brute Force: Password Cracking",
+        "att_id": "T1110.002",
+        "contexts": {
+            "Frontend": [
+                {
+                    "mitigation_id": "M1037.5",
+                    "description": "Enable Fail2Ban for SSH/Web",
+                    "action": "fail2ban-client set sshd banip $SOURCE_IP",
+                    "impact_level": "Low",
+                    "effectiveness": "High"
+                }
+            ],
+            "Database": [
+                {
+                    "mitigation_id": "M1037.6",
+                    "description": "Enforce Multi-Factor Authentication (MFA)",
+                    "action": "pam_google_authenticator --force",
+                    "impact_level": "Medium",
+                    "effectiveness": "Critical"
+                }
+            ]
+        }
+    },
+    "SYN_Flood": {
+        "att_ck_name": "Network Denial of Service: Reflection Amplification",
+        "att_id": "T1498.002",
+        "contexts": {
+            "Frontend": [
+                {
+                    "mitigation_id": "M1037.1",
+                    "description": "Rate Limit Traffic at WAF",
+                    "action": "waf --set rate_limit_req_per_sec=10",
+                    "impact_level": "Low",
+                    "effectiveness": "Medium"
+                }
+            ],
+            "Database": [
+                {
+                    "mitigation_id": "M1037.3",
+                    "description": "Blackhole Source IP at Firewall",
+                    "action": "iptables -A INPUT -s $SOURCE_IP -j DROP",
+                    "impact_level": "High",
+                    "effectiveness": "High"
+                }
+            ]
+        }
     }
 }
