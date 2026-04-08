@@ -23,7 +23,7 @@ jobs:
           if [ -f PETA/requirements.txt ]; then pip install -r PETA/requirements.txt; fi
       - name: Test PETA modules
         run: |
-          pytest PETA/tests/ -v
+          PYTHONPATH=$PYTHONPATH:$(pwd)/PETA pytest PETA/tests/ -v
       - name: Test TAD modules
         run: |
-          pytest TAD/tests/ -v
+          PYTHONPATH=$PYTHONPATH:$(pwd)/TAD/scripts pytest TAD/tests/ -v
