@@ -1,6 +1,6 @@
 # Digital Twin Security Pipeline (TAD & PETA)
 
-This repository contains a unified, automated security pipeline for Eclipse Ditto Digital Twins, integrating **Threat Anomaly Detection (TAD)** and **Proactive Evaluation of Threat Actions (PETA)** via a standardized **Security Digital Twin (SDT) Service** middleware.
+This repository contains a unified, automated security pipeline for Eclipse Ditto Digital Twins, integrating **Tool for Attack detection (TAD)** and **Predictive Tool for Attack Impact Estimation (PETA)** via a standardized **Security Digital Twin (SDT) Service** middleware.
 
 ---
 

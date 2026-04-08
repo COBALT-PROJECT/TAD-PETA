@@ -21,7 +21,7 @@ PETA currently supports mapping and contextual mitigations for the following att
 
 ## SDT-Topo Workflow (In-Lab Demo, SDT-based)
 
-The **SDT-Topo** workflow is designed for in-lab demos where the **TAD (Threat Anomaly Detection)** system orchestrates real-time mitigation via its local `tad_adaptor.py`:
+The **SDT-Topo** workflow is designed for in-lab demos where the **TAD (Tool for Attack detection)** system orchestrates real-time mitigation via its local `tad_adaptor.py`:
 
 ```mermaid
 sequenceDiagram

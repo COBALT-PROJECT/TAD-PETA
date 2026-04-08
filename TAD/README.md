@@ -1,4 +1,4 @@
-# TAD (Threat Anomaly Detection)
+# TAD (Tool for Attack detection)
 
 The TAD module manages the harvesting of network telemetry and the execution of intelligent orchestrations (Machine Learning Inference + Detection) to protect Digital Twins.
 

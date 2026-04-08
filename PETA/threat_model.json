@@ -167,7 +167,7 @@
                     "name": "TAD-Container",
                     "type": "Frontend",
                     "criticality": 7,
-                    "role": "Threat Anomaly Detection",
+                    "role": "Tool for Attack detection",
                     "parent_vm": "nc-vm9"
                 },
                 {
@@ -175,7 +175,7 @@
                     "name": "PETA-Container",
                     "type": "Frontend",
                     "criticality": 8,
-                    "role": "Proactive Evaluation of Threat Actions",
+                    "role": "Predictive Tool for Attack Impact Estimation",
                     "parent_vm": "nc-vm9"
                 }
             ],
