@@ -36,12 +36,13 @@ graph TD
     subgraph Monitoring_Pipeline ["TAD: Detection Cluster"]
         Kafka["Apache Kafka (Streaming)"]
         RM["realtime_monitor.py (ML Inference)"]
+        Adapt["tad_adaptor.py (Ditto ↔ PETA)"]
     end
 
     subgraph Intelligent_Remediation ["PETA: Mitigation Cluster"]
         API["PETA API (/sdt-topo/)"]
         Scoring["Scoring Engine (RF/Context)"]
-        Adapt["tad_adaptor.py (TAD Side)"]
+        PetaAdapt["adaptor.py (JSON Patch Utility)"]
     end
 
     subgraph Digital_Twin_Core ["Digital Twin Infrastructure"]
@@ -60,13 +61,14 @@ graph TD
     %% Remediation Loop
     RM -->|3. Alert Detected| SDT
     SDT -->|4. Fetch Topology| RM
-    RM -->|5. Adaptor: Ditto to PETA| Adapt
+    RM -->|5. Convert to PETA Topo| Adapt
     Adapt -->|6. POST /sdt-topo/| API
-    API -->|Evaluate Mitigations| Scoring
-    Scoring -->|JSON Threat Model| API
-    API -->|7. Mitigation Plan| RM
-    RM -->|8. Adaptor: PETA to SDT Patch| Adapt
-    Adapt -->|9. PUT /api/SDT/update/| SDT
+    API -->|Evaluate Options| Scoring
+    Scoring -->|Select Best| PetaAdapt
+    PetaAdapt -->|Format Threat Model| API
+    API -->|7. Mitigation Plan| Adapt
+    Adapt -->|8. Build SDT Update| RM
+    RM -->|9. PUT /api/SDT/update/| SDT
     SDT -->|10. Enforce Desired State| DT
 ```
 
@@ -109,4 +111,4 @@ graph TD
 
 *   **[TAD Guide](./TAD/README.md)**: Details on data collection, feature extraction, and ML training.
 *   **[PETA Guide](./PETA/README.md)**: Details on the scoring engine, graph traversal, and mitigation mapping.
-*   **[Walkthrough Artifact](file:///home/abdul/.gemini/antigravity/brain/c44c4927-9cdd-4b88-8e43-4d93f49f0da0/walkthrough.md)**: Detailed verification logs for the unified integration.
+
