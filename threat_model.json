@@ -2,81 +2,43 @@
     "threat_model": {
         "id": "tm_8b2c65n3dr87345s54gd746b7h83t82k",
         "metadata": {
-            "timestamp": "2026-03-18T12:00:50Z",
-            "source": "External Network",
-            "targeted_asset": "cobalt.sdt:toe-00000000-0000-0000-0000-000000000000-Resource-20260318113817820402-5924722229"
+            "timestamp": "2026-01-01T00:00:00Z",
+            "source": "Internet",
+            "targeted_asset": "n1"
         },
         "cyber_attack": {
-            "type": "Brute_Force",
+            "type": "Denial_of_Service",
             "mitre": {
-                "name": "Brute Force: Password Cracking",
-                "id": "T1110.002"
+                "name": "Network Denial of Service: Reflection Amplification",
+                "id": "T1498.002"
             }
         },
         "organization_assets": {
             "nodes": [
                 {
-                    "id": "cobalt.sdt:toe-00000000-0000-0000-0000-000000000000-Resource-20260318113817820402-5924722229",
-                    "name": "Frontend Web Server (VirtualMachine)",
+                    "id": "n1",
                     "type": "Frontend",
-                    "ip": "10.0.0.41",
-                    "criticality": 7
+                    "criticality": 5
                 }
             ],
-            "links": [
-                {
-                    "source": "cobalt.sdt:toe-00000000-0000-0000-0000-000000000000-Resource-20260318113817820402-5924722229",
-                    "target": "142.251.39.202",
-                    "type": "Network"
-                },
-                {
-                    "source": "cobalt.sdt:toe-00000000-0000-0000-0000-000000000000-Resource-20260318113817820402-5924722229",
-                    "target": "34.54.84.110",
-                    "type": "Network"
-                },
-                {
-                    "source": "cobalt.sdt:toe-00000000-0000-0000-0000-000000000000-Resource-20260318113817820402-5924722229",
-                    "target": "10.0.0.1",
-                    "type": "Network"
-                },
-                {
-                    "source": "cobalt.sdt:toe-00000000-0000-0000-0000-000000000000-Resource-20260318113817820402-5924722229",
-                    "target": "172.217.171.42",
-                    "type": "Network"
-                },
-                {
-                    "source": "cobalt.sdt:toe-00000000-0000-0000-0000-000000000000-Resource-20260318113817820402-5924722229",
-                    "target": "142.251.142.138",
-                    "type": "Network"
-                },
-                {
-                    "source": "cobalt.sdt:toe-00000000-0000-0000-0000-000000000000-Resource-20260318113817820402-5924722229",
-                    "target": "10.0.0.40",
-                    "type": "Network"
-                },
-                {
-                    "source": "cobalt.sdt:toe-00000000-0000-0000-0000-000000000000-Resource-20260318113817820402-5924722229",
-                    "target": "216.239.38.223",
-                    "type": "Network"
-                }
-            ]
+            "links": []
         },
         "control_action": {
             "mitigation_action": {
                 "methods": [
-                    "Enable Fail2Ban for SSH/Web",
-                    "filter_network_traffic"
+                    "Enable Upstream Scrubbing",
+                    "base_mitigation"
                 ],
-                "mitre_id": "M1037.5",
+                "mitre_id": "M1037.2",
                 "context_applied": "Frontend",
                 "selected_mitigation": {
-                    "mitigation_id": "M1037.5",
-                    "description": "Enable Fail2Ban for SSH/Web",
-                    "action": "fail2ban-client set sshd banip $SOURCE_IP",
-                    "impact_level": "Low",
+                    "mitigation_id": "M1037.2",
+                    "description": "Enable Upstream Scrubbing",
+                    "action": "api.cdn.provider/scrubbing=enable",
+                    "impact_level": "Medium",
                     "effectiveness": "High",
-                    "_calculated_score": 170,
-                    "_target_node_id": "cobalt.sdt:toe-00000000-0000-0000-0000-000000000000-Resource-20260318113817820402-5924722229"
+                    "_calculated_score": 140,
+                    "_target_node_id": "n1"
                 }
             }
         }
