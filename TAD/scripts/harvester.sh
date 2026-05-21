@@ -31,14 +31,10 @@ do
     sudo mount -t nfs "$SERVER" "$MOUNT_POINT"
     
     # 2. Copy the files and rename them with the label and timestamp
+    # Changed from vmbr2 to vmbr1
     if [ -f "$MOUNT_POINT/vmbr1_selected_latest.pcap" ]; then
         cp "$MOUNT_POINT/vmbr1_selected_latest.pcap" "$DEST_DIR/vmbr1_${LABEL}_${TIMESTAMP}.pcap"
         echo "  -> Saved vmbr1_${LABEL}_${TIMESTAMP}.pcap"
-    fi
-    
-    if [ -f "$MOUNT_POINT/vmbr2_selected_latest.pcap" ]; then
-        cp "$MOUNT_POINT/vmbr2_selected_latest.pcap" "$DEST_DIR/vmbr2_${LABEL}_${TIMESTAMP}.pcap"
-        echo "  -> Saved vmbr2_${LABEL}_${TIMESTAMP}.pcap"
     fi
     
     # 3. Unmount immediately to free up SSH resources

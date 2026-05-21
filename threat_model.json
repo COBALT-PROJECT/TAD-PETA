@@ -2,23 +2,32 @@
     "threat_model": {
         "id": "tm_8b2c65n3dr87345s54gd746b7h83t82k",
         "metadata": {
-            "timestamp": "2026-01-01T00:00:00Z",
+            "timestamp": "2026-05-12T13:07:56Z",
             "source": "Internet",
-            "targeted_asset": "n1"
+            "targeted_asset": "cobalt.sdt:toe-00000000-0000-0000-0000-000000000000-RESOURCE-20260511223851900376-6170859470"
         },
         "cyber_attack": {
-            "type": "Denial_of_Service",
+            "type": "Brute_Force",
             "mitre": {
-                "name": "Network Denial of Service: Reflection Amplification",
-                "id": "T1498.002"
+                "name": "Brute Force: Password Cracking",
+                "id": "T1110.002"
             }
         },
         "organization_assets": {
             "nodes": [
                 {
-                    "id": "n1",
+                    "id": "cobalt.sdt:toe-00000000-0000-0000-0000-000000000000-RESOURCE-20260511223851900376-6170859470",
+                    "name": "database (vm)",
+                    "type": "Database",
+                    "ip": "10.0.0.41",
+                    "criticality": 9
+                },
+                {
+                    "id": "cobalt.sdt:toe-00000000-0000-0000-0000-000000000000-RESOURCE-20260511223852409125-8316083523",
+                    "name": "webserver (vm)",
                     "type": "Frontend",
-                    "criticality": 5
+                    "ip": "10.0.0.40",
+                    "criticality": 7
                 }
             ],
             "links": []
@@ -26,19 +35,19 @@
         "control_action": {
             "mitigation_action": {
                 "methods": [
-                    "Enable Upstream Scrubbing",
-                    "base_mitigation"
+                    "Block Brute-Force Source IP at Firewall",
+                    "filter_network_traffic"
                 ],
-                "mitre_id": "M1037.2",
-                "context_applied": "Frontend",
+                "mitre_id": "M1037.7",
+                "context_applied": "Database",
                 "selected_mitigation": {
-                    "mitigation_id": "M1037.2",
-                    "description": "Enable Upstream Scrubbing",
-                    "action": "api.cdn.provider/scrubbing=enable",
-                    "impact_level": "Medium",
+                    "mitigation_id": "M1037.7",
+                    "description": "Block Brute-Force Source IP at Firewall",
+                    "action": "iptables -A INPUT -s $SOURCE_IP -j DROP",
+                    "impact_level": "Low",
                     "effectiveness": "High",
-                    "_calculated_score": 140,
-                    "_target_node_id": "n1"
+                    "_calculated_score": 170,
+                    "_target_node_id": "cobalt.sdt:toe-00000000-0000-0000-0000-000000000000-RESOURCE-20260511223851900376-6170859470"
                 }
             }
         }

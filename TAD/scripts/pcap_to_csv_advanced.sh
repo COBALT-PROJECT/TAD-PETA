@@ -2,17 +2,30 @@
 
 # Configuration
 INPUT_DIR="/home/abdul/DigitalTwin/TAD-PETA/TAD/data"
-OUTPUT_FILE="$INPUT_DIR/attack_traffic_advanced.csv"
+OUTPUT_FILE="$INPUT_DIR/attack_traffic_multiclass.csv"
 
-echo "Creating advanced CSV with extended features..."
+echo "Creating multi-class CSV with extended features..."
 
 # Create CSV Header
 echo "timestamp,frame_len,src_ip,dst_ip,protocol,src_port,dst_port,tcp_flags,ip_ttl,tcp_window_size,tcp_seq,tcp_ack,label" > "$OUTPUT_FILE"
 
-# Process all generic attack PCAP files
-for pcap in "$INPUT_DIR"/*_attack_*.pcap; do
+# Process all PCAP files — order: specific types first, generic last to avoid mislabeling
+for pcap in "$INPUT_DIR"/*_bruteforce_*.pcap "$INPUT_DIR"/*_dos_*.pcap "$INPUT_DIR"/*_scan_*.pcap "$INPUT_DIR"/*_benign_*.pcap "$INPUT_DIR"/*_attack_*.pcap; do
     if [ -f "$pcap" ]; then
         echo "Processing $pcap..."
+        # Derive multi-class label from filename
+        if [[ "$pcap" == *"_benign_"* ]]; then
+            LABEL="benign"
+        elif [[ "$pcap" == *"_bruteforce_"* ]]; then
+            LABEL="bruteforce"
+        elif [[ "$pcap" == *"_dos_"* ]]; then
+            LABEL="dos"
+        elif [[ "$pcap" == *"_scan_"* ]]; then
+            LABEL="scan"
+        else
+            LABEL="attack"
+        fi
+        
         tshark -r "$pcap" -T fields \
             -e frame.time_epoch \
             -e frame.len \
@@ -27,14 +40,14 @@ for pcap in "$INPUT_DIR"/*_attack_*.pcap; do
             -e tcp.seq \
             -e tcp.ack \
             -E separator=, -E occurrence=f | \
-            awk 'BEGIN {FS=","; OFS=","} {
+            awk -v lbl="$LABEL" 'BEGIN {FS=","; OFS=","} {
                 # Handle empty fields for non-TCP packets
                 for(i=1; i<=NF; i++) {
                     if ($i == "") $i="0"
                 }
-                print $0, "1"
+                print $0, lbl
             }' >> "$OUTPUT_FILE"
     fi
 done
 
-echo "Advanced feature extraction complete. Output saved to $OUTPUT_FILE"
+echo "Multi-class feature extraction complete. Output saved to $OUTPUT_FILE"

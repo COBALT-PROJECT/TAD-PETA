@@ -17,6 +17,20 @@
                     "action": "api.cdn.provider/scrubbing=enable",
                     "impact_level": "Medium",
                     "effectiveness": "High"
+                },
+                {
+                    "mitigation_id": "M1037.8",
+                    "description": "Block Source IP at Firewall",
+                    "action": "iptables -A INPUT -s $SOURCE_IP -j DROP",
+                    "impact_level": "Low",
+                    "effectiveness": "Medium"
+                },
+                {
+                    "mitigation_id": "M1037.9",
+                    "description": "Enable SYN Cookie Protection",
+                    "action": "sysctl -w net.ipv4.tcp_syncookies=1",
+                    "impact_level": "Low",
+                    "effectiveness": "High"
                 }
             ],
             "Database": [
@@ -25,6 +39,20 @@
                     "description": "Blackhole Source IP at Firewall",
                     "action": "iptables -A INPUT -s $SOURCE_IP -j DROP",
                     "impact_level": "High",
+                    "effectiveness": "High"
+                },
+                {
+                    "mitigation_id": "M1037.10",
+                    "description": "Limit Maximum DB Connections",
+                    "action": "postgres --max_connections=50",
+                    "impact_level": "Medium",
+                    "effectiveness": "Medium"
+                },
+                {
+                    "mitigation_id": "M1037.11",
+                    "description": "Restrict External DB Access via Firewall",
+                    "action": "iptables -A INPUT -p tcp --dport 5432 ! -s 10.0.0.0/24 -j DROP",
+                    "impact_level": "Low",
                     "effectiveness": "High"
                 }
             ]
@@ -79,6 +107,20 @@
                     "action": "iptables -A INPUT -s $SOURCE_IP -j DROP",
                     "impact_level": "Low",
                     "effectiveness": "High"
+                },
+                {
+                    "mitigation_id": "M1037.12",
+                    "description": "Throttle ICMP and Port Probe Responses",
+                    "action": "iptables -A INPUT -p tcp --tcp-flags SYN,ACK SYN -m limit --limit 5/s -j ACCEPT",
+                    "impact_level": "Low",
+                    "effectiveness": "Medium"
+                },
+                {
+                    "mitigation_id": "M1030.1",
+                    "description": "Restrict Exposed Ports to Required Services Only",
+                    "action": "iptables -A INPUT -p tcp --dport 22,80,443 -j ACCEPT && iptables -A INPUT -p tcp -j DROP",
+                    "impact_level": "Medium",
+                    "effectiveness": "High"
                 }
             ],
             "Database": [
@@ -88,6 +130,20 @@
                     "action": "iptables -A INPUT -s $SOURCE_IP -j DROP",
                     "impact_level": "Low",
                     "effectiveness": "High"
+                },
+                {
+                    "mitigation_id": "M1030.2",
+                    "description": "Close All Non-Essential DB Ports",
+                    "action": "iptables -A INPUT -p tcp --dport 5432 ! -s 10.0.0.0/24 -j DROP",
+                    "impact_level": "Low",
+                    "effectiveness": "High"
+                },
+                {
+                    "mitigation_id": "M1037.13",
+                    "description": "Enable Port Scan Detection and Auto-Ban via Fail2Ban",
+                    "action": "fail2ban-client set portscan banip $SOURCE_IP",
+                    "impact_level": "Low",
+                    "effectiveness": "Medium"
                 }
             ]
         }
@@ -103,6 +159,20 @@
                     "action": "fail2ban-client set sshd banip $SOURCE_IP",
                     "impact_level": "Low",
                     "effectiveness": "High"
+                },
+                {
+                    "mitigation_id": "M1036.1",
+                    "description": "Enforce Account Lockout After Failed Attempts",
+                    "action": "pam_tally2 --deny=5 --lock-time=900",
+                    "impact_level": "Medium",
+                    "effectiveness": "High"
+                },
+                {
+                    "mitigation_id": "M1027.1",
+                    "description": "Enforce Strong Password Policy",
+                    "action": "pam_pwquality --minlen=12 --dcredit=-1 --ucredit=-1",
+                    "impact_level": "Low",
+                    "effectiveness": "Medium"
                 }
             ],
             "Database": [
@@ -111,7 +181,21 @@
                     "description": "Enforce Multi-Factor Authentication (MFA)",
                     "action": "pam_google_authenticator --force",
                     "impact_level": "Medium",
-                    "effectiveness": "Critical"
+                    "effectiveness": "High"
+                },
+                {
+                    "mitigation_id": "M1037.7",
+                    "description": "Block Brute-Force Source IP at Firewall",
+                    "action": "iptables -A INPUT -s $SOURCE_IP -j DROP",
+                    "impact_level": "Low",
+                    "effectiveness": "High"
+                },
+                {
+                    "mitigation_id": "M1036.2",
+                    "description": "Rotate DB Credentials and Restrict Login Attempts",
+                    "action": "psql -c \"ALTER USER $DB_USER PASSWORD '$NEW_PASS';\" && pam_tally2 --deny=3",
+                    "impact_level": "High",
+                    "effectiveness": "High"
                 }
             ]
         }
@@ -127,6 +211,13 @@
                     "action": "waf --set rate_limit_req_per_sec=10",
                     "impact_level": "Low",
                     "effectiveness": "Medium"
+                },
+                {
+                    "mitigation_id": "M1037.9",
+                    "description": "Enable SYN Cookie Protection",
+                    "action": "sysctl -w net.ipv4.tcp_syncookies=1",
+                    "impact_level": "Low",
+                    "effectiveness": "High"
                 }
             ],
             "Database": [
@@ -136,6 +227,13 @@
                     "action": "iptables -A INPUT -s $SOURCE_IP -j DROP",
                     "impact_level": "High",
                     "effectiveness": "High"
+                },
+                {
+                    "mitigation_id": "M1037.10",
+                    "description": "Limit Maximum DB Connections",
+                    "action": "postgres --max_connections=50",
+                    "impact_level": "Medium",
+                    "effectiveness": "Medium"
                 }
             ]
         }

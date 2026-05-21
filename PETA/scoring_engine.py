@@ -4,7 +4,7 @@ def score_mitigations(attack_mapping, attack_type, target_node, nodes, links):
     high criticality, dynamically traverses the graph upstream to find better alternatives.
     """
     impact_scores = {"Low": 80, "Medium": 50, "High": 20, "Critical": -50}
-    effectiveness_scores = {"Low": 10, "Medium": 50, "High": 90}
+    effectiveness_scores = {"Low": 10, "Medium": 50, "High": 90, "Critical": 100}
     
     # Extract contextual mitigations for a specific node and score them
     def evaluate_node(node):

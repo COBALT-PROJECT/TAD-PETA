@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Response
+from fastapi import FastAPI
 from threat_model import generate_threat_model
 import requests
 from requests.exceptions import RequestException
@@ -47,8 +47,8 @@ def send_output(json_schema):
     api_url = f"{sandbox_url}:{sandbox_port}/{sandbox_endpoint}"
     try:    
         requests.post(api_url, json=json_schema, timeout=5)
-    except RequestException as e:
-        print(f"Sandbox Connection Error: {e}")
+    except RequestException:
+        pass  # Sandbox not running — non-fatal
 
 def log_to_file(message):
     with open("log", "a") as f:
@@ -56,10 +56,13 @@ def log_to_file(message):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         f.write(f"[{timestamp}] {message}\n")
 
-app = FastAPI()
+app = FastAPI(
+    title="PETA",
+    description="Predictive tool for attack impact estimation",
+)
 
-@app.post("/sdt-topo/")
-def create_threat_model(cyber_attack: dict): 
+@app.post("/PETA/sdt/impact", description="Attack impact analysis")
+def SDT_attack_impact_analysis(cyber_attack: dict): 
     # Extract Attack Info
     attack_data = cyber_attack.get("cyber_attack", {})
     attack_type = attack_data.get("type", "Unknown")
@@ -88,23 +91,19 @@ def create_threat_model(cyber_attack: dict):
     # Generate JSON Threat Model with Context
     model = generate_threat_model(nodes, links, attack_type, location, timestamp, mitigations, target_asset_id)
     
+    # Save to file
+    with open("threat_model.json", "w") as f:
+        json.dump(model, f, indent=2)
+
     # Send to Sandbox
     send_output(model)
     
     return model
 
-@app.get("/fetch-json-schema")
-def fetch_json_schema():
-    if os.path.exists("threat_model.json"):
-        with open("threat_model.json", 'r') as f:
-            return json.load(f)
-    return {"error": "No model found"}
 
-@app.post("/cobalt-topo/")
-def cobalt_topo_analysis(cyber_attack: dict): 
-    """
-    Processes a pre-converted local topology file (cobalt_topology.json) and logs results.
-    """
+
+@app.post("/PETA/cobalt/impact", description="Attack impact analysis")
+def COBALT_attack_impact_analysis(cyber_attack: dict):
     # Extract Attack Info (consistent with /sdt-topo/)
     attack_data = cyber_attack.get("cyber_attack", {})
     attack_type = attack_data.get("type", "SQL_Injection")
@@ -144,7 +143,11 @@ def cobalt_topo_analysis(cyber_attack: dict):
     )
 
     
-    # 4. Logging
+    # 4. Save to file
+    with open("threat_model.json", "w") as f:
+        json.dump(model, f, indent=2)
+
+    # 5. Logging
     threat_model_data = model.get("threat_model", {})
     metadata = threat_model_data.get("metadata", {})
     impacted_asset = metadata.get("targeted_asset")
@@ -159,11 +162,17 @@ def cobalt_topo_analysis(cyber_attack: dict):
     
     return model
 
+@app.get("/PETA/threat_model", description="Retrieve the latest generated threat model")
+def Threat_model_with_mitigation_actions():
+    if os.path.exists("threat_model.json"):
+        with open("threat_model.json", 'r') as f:
+            return json.load(f)
+    return {"error": "No model found"}
 
-# Keep legacy endpoint for compatibility but return JSON
-@app.post("/xml-scheme/")
-def legacy_endpoint(cyber_attack: dict):
-    return create_threat_model(cyber_attack)
+# # Keep legacy endpoint for compatibility but return JSON
+# @app.get("/PETA/sdt/legacy")
+# def SDT_XML_Schema(cyber_attack: dict):
+#     return SDT_attack_impact_analysis(cyber_attack)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
