@@ -75,6 +75,9 @@ docs/_build/
 .pybuilder/
 target/
 
+
+
+
 # Jupyter Notebook
 .ipynb_checkpoints
 
@@ -150,3 +153,9 @@ cython_debug/
 .DS_Store
 Thumbs.db
 TAD/data/
+TAD/models
+TAD/scripts
+
+# Project-local docs and logs
+CLAUDE.md
+*.txt
