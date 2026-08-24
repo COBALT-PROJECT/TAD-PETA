@@ -1,0 +1,316 @@
+{
+  "topology": {
+    "nodes": [
+      {
+        "id": "ncsrd-datalake",
+        "name": "Data-Lake",
+        "type": "Database",
+        "criticality": 9,
+        "role": "VM 1160 \u2014 data lake store",
+        "ip": "10.163.1.103",
+        "open_ports": [
+          5432,
+          9000,
+          22
+        ]
+      },
+      {
+        "id": "ncsrd-toe",
+        "name": "ai-target-of-evaluation",
+        "type": "Frontend",
+        "criticality": 7,
+        "role": "VM 1158 \u2014 AI target of evaluation",
+        "ip": "10.163.1.118",
+        "open_ports": [
+          80,
+          443,
+          8080,
+          22
+        ]
+      },
+      {
+        "id": "ncsrd-iam",
+        "name": "iam",
+        "type": "Identity",
+        "criticality": 10,
+        "role": "VM 1155 \u2014 identity & access mgmt",
+        "ip": "10.163.1.120",
+        "open_ports": [
+          389,
+          636,
+          8443,
+          22
+        ]
+      },
+      {
+        "id": "ncsrd-worker3",
+        "name": "Worker3",
+        "type": "Compute",
+        "criticality": 6,
+        "role": "VM 1124 \u2014 K3s worker 3",
+        "ip": "10.163.1.121",
+        "open_ports": [
+          10250,
+          30000,
+          22
+        ]
+      },
+      {
+        "id": "ncsrd-sdtm",
+        "name": "sdtm",
+        "type": "Security",
+        "criticality": 8,
+        "role": "VM 1089 \u2014 SDT manager",
+        "ip": "10.163.1.122",
+        "open_ports": [
+          8001,
+          22
+        ]
+      },
+      {
+        "id": "ncsrd-cobalt",
+        "name": "cobalt",
+        "type": "Frontend",
+        "criticality": 7,
+        "role": "cobalt application node",
+        "ip": "10.163.1.123",
+        "open_ports": [
+          80,
+          443,
+          22
+        ]
+      },
+      {
+        "id": "ncsrd-watchtower",
+        "name": "watchtower",
+        "type": "Security",
+        "criticality": 8,
+        "role": "VM 1084 \u2014 monitoring / watchtower",
+        "ip": "10.163.1.125",
+        "open_ports": [
+          3000,
+          9090,
+          22
+        ]
+      },
+      {
+        "id": "ncsrd-sdt-tad",
+        "name": "sdt / TAD-PETA",
+        "type": "Security",
+        "criticality": 9,
+        "role": "VM 1082 \u2014 SDT + TAD/PETA services",
+        "ip": "10.163.1.126",
+        "open_ports": [
+          8000,
+          8001,
+          8002,
+          8080,
+          22
+        ]
+      },
+      {
+        "id": "ncsrd-clouditor",
+        "name": "Clouditor / orchestrator",
+        "type": "Security",
+        "criticality": 9,
+        "role": "VM 1077 \u2014 Clouditor orchestrator",
+        "ip": "10.163.1.127",
+        "open_ports": [
+          9090,
+          8080,
+          22
+        ]
+      },
+      {
+        "id": "ncsrd-worker2",
+        "name": "Worker2",
+        "type": "Compute",
+        "criticality": 6,
+        "role": "VM 1049 \u2014 K3s worker 2",
+        "ip": "10.163.1.128",
+        "open_ports": [
+          10250,
+          30000,
+          22
+        ]
+      },
+      {
+        "id": "ncsrd-worker1",
+        "name": "Worker1",
+        "type": "Compute",
+        "criticality": 6,
+        "role": "VM 1033 \u2014 K3s worker 1",
+        "ip": "10.163.1.129",
+        "open_ports": [
+          10250,
+          30000,
+          22
+        ]
+      },
+      {
+        "id": "ncsrd-k3s-master",
+        "name": "MasterK3s",
+        "type": "Compute",
+        "criticality": 10,
+        "role": "VM 1031 \u2014 K3s control plane",
+        "ip": "10.163.1.130",
+        "open_ports": [
+          6443,
+          2379,
+          10250,
+          22
+        ]
+      },
+      {
+        "id": "ncsrd-ccm-manager",
+        "name": "CCM-Manager",
+        "type": "Frontend",
+        "criticality": 8,
+        "role": "VM 1257/1050 \u2014 CCM manager",
+        "ip": "10.163.1.160",
+        "open_ports": [
+          8080,
+          443,
+          22
+        ]
+      },
+      {
+        "id": "ncsrd-sqlserver",
+        "name": "sqlserver",
+        "type": "Database",
+        "criticality": 9,
+        "role": "SQL Server host",
+        "ip": "10.163.1.170",
+        "open_ports": [
+          1433,
+          22
+        ]
+      },
+      {
+        "id": "ncsrd-mysql",
+        "name": "mysql",
+        "type": "Database",
+        "criticality": 9,
+        "role": "VM 1191 \u2014 MySQL",
+        "ip": "10.163.1.176",
+        "open_ports": [
+          3306,
+          22
+        ]
+      },
+      {
+        "id": "ncsrd-ccmui",
+        "name": "ccmui",
+        "type": "Frontend",
+        "criticality": 6,
+        "role": "VM 1219 \u2014 CCM web UI",
+        "ip": "10.163.1.204",
+        "open_ports": [
+          80,
+          443,
+          22
+        ]
+      },
+      {
+        "id": "ncsrd-cobalt-dlt",
+        "name": "cobalt-dlt",
+        "type": "Database",
+        "criticality": 8,
+        "role": "VM 1087 \u2014 cobalt DLT ledger",
+        "ip": "10.163.1.211",
+        "open_ports": [
+          8545,
+          30303,
+          22
+        ]
+      },
+      {
+        "id": "ncsrd-ral-cp-drm",
+        "name": "ral-cp-drm",
+        "type": "Frontend",
+        "criticality": 7,
+        "role": "VM 1232 \u2014 RAL CP DRM",
+        "ip": "10.163.1.249",
+        "open_ports": [
+          8080,
+          443,
+          22
+        ]
+      }
+    ],
+    "links": [
+      {
+        "source": "ncsrd-toe",
+        "target": "ncsrd-datalake"
+      },
+      {
+        "source": "ncsrd-toe",
+        "target": "ncsrd-iam"
+      },
+      {
+        "source": "ncsrd-cobalt",
+        "target": "ncsrd-cobalt-dlt"
+      },
+      {
+        "source": "ncsrd-cobalt",
+        "target": "ncsrd-iam"
+      },
+      {
+        "source": "ncsrd-ccmui",
+        "target": "ncsrd-ccm-manager"
+      },
+      {
+        "source": "ncsrd-ccm-manager",
+        "target": "ncsrd-mysql"
+      },
+      {
+        "source": "ncsrd-ccm-manager",
+        "target": "ncsrd-iam"
+      },
+      {
+        "source": "ncsrd-ral-cp-drm",
+        "target": "ncsrd-sqlserver"
+      },
+      {
+        "source": "ncsrd-ral-cp-drm",
+        "target": "ncsrd-iam"
+      },
+      {
+        "source": "ncsrd-worker1",
+        "target": "ncsrd-k3s-master"
+      },
+      {
+        "source": "ncsrd-worker2",
+        "target": "ncsrd-k3s-master"
+      },
+      {
+        "source": "ncsrd-worker3",
+        "target": "ncsrd-k3s-master"
+      },
+      {
+        "source": "ncsrd-sdtm",
+        "target": "ncsrd-sdt-tad"
+      },
+      {
+        "source": "ncsrd-watchtower",
+        "target": "ncsrd-sdt-tad"
+      },
+      {
+        "source": "ncsrd-clouditor",
+        "target": "ncsrd-sdt-tad"
+      },
+      {
+        "source": "ncsrd-sdt-tad",
+        "target": "ncsrd-k3s-master"
+      },
+      {
+        "source": "ncsrd-toe",
+        "target": "ncsrd-k3s-master"
+      },
+      {
+        "source": "ncsrd-cobalt",
+        "target": "ncsrd-k3s-master"
+      }
+    ]
+  }
+}

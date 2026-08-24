@@ -1,0 +1,847 @@
+{
+  "Denial_of_Service": {
+    "att_ck_name": "Network Denial of Service: Reflection Amplification",
+    "att_id": "T1498.002",
+    "contexts": {
+      "Frontend": [
+        {
+          "mitigation_id": "M1037.F1",
+          "description": "Rate limit at nginx",
+          "action": "nginx -s reload after limit_req_zone $binary_remote_addr zone=ddos:10m rate=10r/s",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1037.F2",
+          "description": "Rate limit new conns with ufw",
+          "action": "ufw limit proto tcp from any to any port 443",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1037.F3",
+          "description": "Drop source with nftables",
+          "action": "nft add rule inet filter input ip saddr $SOURCE_IP drop",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1037.F4",
+          "description": "Enable upstream scrubbing",
+          "action": "curl -X POST api.cdn.provider/scrubbing?enable=true",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        }
+      ],
+      "Database": [
+        {
+          "mitigation_id": "M1037.D1",
+          "description": "Restrict DB port to app subnet",
+          "action": "ufw delete allow 3306 && ufw allow from 10.163.1.0/24 to any port 3306",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1037.D2",
+          "description": "Cap concurrent connections",
+          "action": "mysql -e \"SET GLOBAL max_connections=150;\"",
+          "impact_level": "Medium",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1037.D3",
+          "description": "Throttle source at host firewall",
+          "action": "iptables -A INPUT -s $SOURCE_IP -p tcp --dport 3306 -m limit --limit 20/s -j ACCEPT",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1037.D4",
+          "description": "Stop DB service",
+          "action": "systemctl stop mysql",
+          "impact_level": "Critical",
+          "effectiveness": "Critical"
+        }
+      ],
+      "Compute": [
+        {
+          "mitigation_id": "M1037.C1",
+          "description": "Rate limit NodePort range",
+          "action": "iptables -A INPUT -p tcp --dport 30000:32767 -m limit --limit 50/s -j ACCEPT",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1037.C2",
+          "description": "Drop source at node firewall",
+          "action": "ufw deny from $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1037.C3",
+          "description": "Cordon node and drain workloads",
+          "action": "kubectl cordon $NODE && kubectl drain $NODE --ignore-daemonsets",
+          "impact_level": "High",
+          "effectiveness": "High"
+        }
+      ],
+      "Identity": [
+        {
+          "mitigation_id": "M1037.I1",
+          "description": "Rate limit auth endpoint",
+          "action": "nft add rule inet filter input tcp dport 8443 limit rate 20/second accept",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1037.I2",
+          "description": "Drop source IP",
+          "action": "ufw deny from $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1037.I3",
+          "description": "Restrict IAM to internal subnet",
+          "action": "ufw allow from 10.163.1.0/24 to any port 8443 && ufw deny 8443",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        }
+      ],
+      "Security": [
+        {
+          "mitigation_id": "M1037.S1",
+          "description": "Rate limit ingest endpoint",
+          "action": "nft add rule inet filter input tcp dport 8002 limit rate 100/second accept",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1037.S2",
+          "description": "Drop source IP",
+          "action": "ufw deny from $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1037.S3",
+          "description": "Restrict service to management subnet",
+          "action": "ufw allow from 10.163.1.0/24 to any port 8002 && ufw deny 8002",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        }
+      ]
+    }
+  },
+  "SYN_Flood": {
+    "att_ck_name": "Endpoint Denial of Service: TCP SYN Flood",
+    "att_id": "T1499.001",
+    "contexts": {
+      "Frontend": [
+        {
+          "mitigation_id": "M1037.SYN.F1",
+          "description": "Enable SYN cookies",
+          "action": "sysctl -w net.ipv4.tcp_syncookies=1",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1037.SYN.F2",
+          "description": "Enlarge SYN backlog",
+          "action": "sysctl -w net.ipv4.tcp_max_syn_backlog=4096 && sysctl -w net.ipv4.tcp_synack_retries=2",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1037.SYN.F3",
+          "description": "Rate limit SYN packets",
+          "action": "iptables -A INPUT -p tcp --syn -m limit --limit 25/s --limit-burst 50 -j ACCEPT",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1037.SYN.F4",
+          "description": "Drop source IP",
+          "action": "ufw deny from $SOURCE_IP",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        }
+      ],
+      "Database": [
+        {
+          "mitigation_id": "M1037.SYN.D1",
+          "description": "Enable SYN cookies",
+          "action": "sysctl -w net.ipv4.tcp_syncookies=1",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1037.SYN.D2",
+          "description": "Enlarge SYN backlog",
+          "action": "sysctl -w net.ipv4.tcp_max_syn_backlog=4096 && sysctl -w net.ipv4.tcp_synack_retries=2",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1037.SYN.D3",
+          "description": "Rate limit SYN packets",
+          "action": "iptables -A INPUT -p tcp --syn -m limit --limit 25/s --limit-burst 50 -j ACCEPT",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1037.SYN.D4",
+          "description": "Drop source IP",
+          "action": "ufw deny from $SOURCE_IP",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        }
+      ],
+      "Compute": [
+        {
+          "mitigation_id": "M1037.SYN.C1",
+          "description": "Enable SYN cookies",
+          "action": "sysctl -w net.ipv4.tcp_syncookies=1",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1037.SYN.C2",
+          "description": "Enlarge SYN backlog",
+          "action": "sysctl -w net.ipv4.tcp_max_syn_backlog=4096 && sysctl -w net.ipv4.tcp_synack_retries=2",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1037.SYN.C3",
+          "description": "Rate limit SYN packets",
+          "action": "iptables -A INPUT -p tcp --syn -m limit --limit 25/s --limit-burst 50 -j ACCEPT",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1037.SYN.C4",
+          "description": "Drop source IP",
+          "action": "ufw deny from $SOURCE_IP",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        }
+      ],
+      "Identity": [
+        {
+          "mitigation_id": "M1037.SYN.I1",
+          "description": "Enable SYN cookies",
+          "action": "sysctl -w net.ipv4.tcp_syncookies=1",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1037.SYN.I2",
+          "description": "Enlarge SYN backlog",
+          "action": "sysctl -w net.ipv4.tcp_max_syn_backlog=4096 && sysctl -w net.ipv4.tcp_synack_retries=2",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1037.SYN.I3",
+          "description": "Rate limit SYN packets",
+          "action": "iptables -A INPUT -p tcp --syn -m limit --limit 25/s --limit-burst 50 -j ACCEPT",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1037.SYN.I4",
+          "description": "Drop source IP",
+          "action": "ufw deny from $SOURCE_IP",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        }
+      ],
+      "Security": [
+        {
+          "mitigation_id": "M1037.SYN.S1",
+          "description": "Enable SYN cookies",
+          "action": "sysctl -w net.ipv4.tcp_syncookies=1",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1037.SYN.S2",
+          "description": "Enlarge SYN backlog",
+          "action": "sysctl -w net.ipv4.tcp_max_syn_backlog=4096 && sysctl -w net.ipv4.tcp_synack_retries=2",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1037.SYN.S3",
+          "description": "Rate limit SYN packets",
+          "action": "iptables -A INPUT -p tcp --syn -m limit --limit 25/s --limit-burst 50 -j ACCEPT",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1037.SYN.S4",
+          "description": "Drop source IP",
+          "action": "ufw deny from $SOURCE_IP",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        }
+      ]
+    }
+  },
+  "Port_Scan": {
+    "att_ck_name": "Network Service Discovery",
+    "att_id": "T1046",
+    "contexts": {
+      "Frontend": [
+        {
+          "mitigation_id": "M1030.F1",
+          "description": "Ban scanner with fail2ban",
+          "action": "fail2ban-client set portscan banip $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1030.F2",
+          "description": "Drop scanner at firewall",
+          "action": "ufw deny from $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1030.F3",
+          "description": "Default-deny inbound, allow only 80/443",
+          "action": "ufw default deny incoming && ufw allow 80,443/tcp",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        }
+      ],
+      "Database": [
+        {
+          "mitigation_id": "M1030.D1",
+          "description": "Ban scanner with fail2ban",
+          "action": "fail2ban-client set portscan banip $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1030.D2",
+          "description": "Expose DB port only to app subnet",
+          "action": "ufw delete allow 3306 && ufw allow from 10.163.1.0/24 to any port 3306",
+          "impact_level": "Medium",
+          "effectiveness": "Critical"
+        },
+        {
+          "mitigation_id": "M1030.D3",
+          "description": "Drop scanner at firewall",
+          "action": "ufw deny from $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        }
+      ],
+      "Compute": [
+        {
+          "mitigation_id": "M1030.C1",
+          "description": "Ban scanner with fail2ban",
+          "action": "fail2ban-client set portscan banip $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1030.C2",
+          "description": "Restrict kubelet API to control plane",
+          "action": "ufw allow from 10.163.1.130 to any port 10250 && ufw deny 10250",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1030.C3",
+          "description": "Drop scanner at firewall",
+          "action": "ufw deny from $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        }
+      ],
+      "Identity": [
+        {
+          "mitigation_id": "M1030.I1",
+          "description": "Ban scanner with fail2ban",
+          "action": "fail2ban-client set portscan banip $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1030.I2",
+          "description": "Restrict LDAP/OIDC to internal subnet",
+          "action": "ufw allow from 10.163.1.0/24 to any port 389,636,8443 && ufw deny 389,636,8443",
+          "impact_level": "Medium",
+          "effectiveness": "Critical"
+        },
+        {
+          "mitigation_id": "M1030.I3",
+          "description": "Drop scanner at firewall",
+          "action": "ufw deny from $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        }
+      ],
+      "Security": [
+        {
+          "mitigation_id": "M1030.S1",
+          "description": "Ban scanner with fail2ban",
+          "action": "fail2ban-client set portscan banip $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1030.S2",
+          "description": "Drop scanner at firewall",
+          "action": "ufw deny from $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1030.S3",
+          "description": "Restrict management ports to admin subnet",
+          "action": "ufw allow from 10.163.1.0/24 to any port 8000,8001,8002 && ufw deny 8000,8001,8002",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        }
+      ]
+    }
+  },
+  "Brute_Force": {
+    "att_ck_name": "Brute Force: Password Guessing",
+    "att_id": "T1110.001",
+    "contexts": {
+      "Frontend": [
+        {
+          "mitigation_id": "M1036.F1",
+          "description": "Ban source via fail2ban sshd jail",
+          "action": "fail2ban-client set sshd banip $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1036.F2",
+          "description": "Rate limit SSH",
+          "action": "ufw limit ssh",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1036.F3",
+          "description": "Cap SSH auth attempts",
+          "action": "sed -i 's/^#*MaxAuthTries.*/MaxAuthTries 3/' /etc/ssh/sshd_config && systemctl reload ssh",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1036.F4",
+          "description": "Disable password auth (keys only)",
+          "action": "sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && systemctl reload ssh",
+          "impact_level": "Medium",
+          "effectiveness": "Critical"
+        }
+      ],
+      "Database": [
+        {
+          "mitigation_id": "M1036.D1",
+          "description": "Ban source via fail2ban",
+          "action": "fail2ban-client set sshd banip $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1036.D2",
+          "description": "Lock targeted DB account",
+          "action": "mysql -e \"ALTER USER '$TARGET_USER'@'%' ACCOUNT LOCK;\"",
+          "impact_level": "Medium",
+          "effectiveness": "Critical"
+        },
+        {
+          "mitigation_id": "M1036.D3",
+          "description": "Restrict DB auth to app subnet",
+          "action": "ufw allow from 10.163.1.0/24 to any port 3306 && ufw deny 3306",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1036.D4",
+          "description": "Disable password auth (keys only)",
+          "action": "sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && systemctl reload ssh",
+          "impact_level": "Medium",
+          "effectiveness": "Critical"
+        }
+      ],
+      "Compute": [
+        {
+          "mitigation_id": "M1036.C1",
+          "description": "Ban source via fail2ban",
+          "action": "fail2ban-client set sshd banip $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1036.C2",
+          "description": "Rate limit SSH",
+          "action": "ufw limit ssh",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1036.C3",
+          "description": "Disable password auth (keys only)",
+          "action": "sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && systemctl reload ssh",
+          "impact_level": "Medium",
+          "effectiveness": "Critical"
+        }
+      ],
+      "Identity": [
+        {
+          "mitigation_id": "M1036.I1",
+          "description": "Ban source via fail2ban",
+          "action": "fail2ban-client set sshd banip $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1036.I2",
+          "description": "Lock the targeted identity",
+          "action": "kubectl -n iam exec deploy/keycloak -- /opt/keycloak/bin/kcadm.sh update users/$TARGET_USER -s enabled=false",
+          "impact_level": "Medium",
+          "effectiveness": "Critical"
+        },
+        {
+          "mitigation_id": "M1036.I3",
+          "description": "Enforce account lockout policy",
+          "action": "pam-auth-update --enable faillock && sed -i 's/^#*deny.*/deny = 5/' /etc/security/faillock.conf",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1036.I4",
+          "description": "Disable password auth (keys only)",
+          "action": "sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && systemctl reload ssh",
+          "impact_level": "Medium",
+          "effectiveness": "Critical"
+        }
+      ],
+      "Security": [
+        {
+          "mitigation_id": "M1036.S1",
+          "description": "Ban source via fail2ban",
+          "action": "fail2ban-client set sshd banip $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1036.S2",
+          "description": "Rate limit SSH",
+          "action": "ufw limit ssh",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1036.S3",
+          "description": "Restrict SSH to admin subnet",
+          "action": "ufw allow from 10.163.1.0/24 to any port 22 && ufw deny 22",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        }
+      ]
+    }
+  },
+  "SQL_Injection": {
+    "att_ck_name": "Exploit Public-Facing Application",
+    "att_id": "T1190",
+    "contexts": {
+      "Frontend": [
+        {
+          "mitigation_id": "M1051.F1",
+          "description": "Enable WAF SQLi ruleset",
+          "action": "a2enmod security2 && sed -i 's/SecRuleEngine.*/SecRuleEngine On/' /etc/modsecurity/modsecurity.conf && systemctl reload apache2",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1051.F2",
+          "description": "Block source IP",
+          "action": "ufw deny from $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1051.F3",
+          "description": "Patch application packages",
+          "action": "apt-get update && apt-get install --only-upgrade -y $APP_PACKAGE",
+          "impact_level": "Medium",
+          "effectiveness": "Critical"
+        },
+        {
+          "mitigation_id": "M1051.F4",
+          "description": "Take endpoint offline",
+          "action": "systemctl stop nginx",
+          "impact_level": "Critical",
+          "effectiveness": "Critical"
+        }
+      ],
+      "Database": [
+        {
+          "mitigation_id": "M1051.D1",
+          "description": "Revoke risky privileges from app user",
+          "action": "mysql -e \"REVOKE FILE, SUPER ON *.* FROM '$APP_USER'@'%'; FLUSH PRIVILEGES;\"",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1051.D2",
+          "description": "Enable general query audit",
+          "action": "mysql -e \"SET GLOBAL general_log='ON';\"",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1051.D3",
+          "description": "Restrict DB to app subnet",
+          "action": "ufw allow from 10.163.1.0/24 to any port 3306 && ufw deny 3306",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1051.D4",
+          "description": "Stop DB service",
+          "action": "systemctl stop mysql",
+          "impact_level": "Critical",
+          "effectiveness": "Critical"
+        }
+      ],
+      "Compute": [
+        {
+          "mitigation_id": "M1051.C1",
+          "description": "Apply NetworkPolicy to isolate pod",
+          "action": "kubectl -n $NS apply -f deny-egress-netpol.yaml",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1051.C2",
+          "description": "Block source IP",
+          "action": "ufw deny from $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1051.C3",
+          "description": "Roll out patched image",
+          "action": "kubectl -n $NS set image deploy/$APP $APP=$IMAGE:patched",
+          "impact_level": "Medium",
+          "effectiveness": "Critical"
+        }
+      ],
+      "Identity": [
+        {
+          "mitigation_id": "M1051.I1",
+          "description": "Block source IP",
+          "action": "ufw deny from $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1051.I2",
+          "description": "Rotate IAM service credentials",
+          "action": "kubectl -n iam delete secret iam-db-credentials && kubectl -n iam create secret generic iam-db-credentials --from-literal=password=$NEW_PW",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1051.I3",
+          "description": "Patch IAM packages",
+          "action": "apt-get update && apt-get install --only-upgrade -y keycloak",
+          "impact_level": "Medium",
+          "effectiveness": "Critical"
+        }
+      ],
+      "Security": [
+        {
+          "mitigation_id": "M1051.S1",
+          "description": "Block source IP",
+          "action": "ufw deny from $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1051.S2",
+          "description": "Patch service packages",
+          "action": "apt-get update && apt-get upgrade -y",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1051.S3",
+          "description": "Restrict API to management subnet",
+          "action": "ufw allow from 10.163.1.0/24 to any port 8000,8001,8002 && ufw deny 8000,8001,8002",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        }
+      ]
+    }
+  },
+  "Host_Compromise": {
+    "att_ck_name": "Command and Control / Execution: Reverse Shell on Compromised Host",
+    "att_id": "T1059.004",
+    "contexts": {
+      "Frontend": [
+        {
+          "mitigation_id": "M1040.F1",
+          "description": "Kill non-interactive reverse shells",
+          "action": "pkill -9 -f 'bash -i' ; pkill -9 -f 'nc -e'",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1040.F2",
+          "description": "Block C2 egress to source",
+          "action": "ufw deny out to $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1040.F3",
+          "description": "Terminate attacker SSH sessions and revoke keys",
+          "action": "pkill -9 -u $COMPROMISED_USER sshd ; truncate -s 0 /home/$COMPROMISED_USER/.ssh/authorized_keys",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1040.F4",
+          "description": "Network-isolate the host",
+          "action": "ufw default deny incoming && ufw default deny outgoing && ufw allow from 10.163.1.0/24 to any port 22",
+          "impact_level": "High",
+          "effectiveness": "Critical"
+        }
+      ],
+      "Database": [
+        {
+          "mitigation_id": "M1040.D1",
+          "description": "Kill reverse shell processes",
+          "action": "pkill -9 -f 'bash -i' ; pkill -9 -f 'nc -e'",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1040.D2",
+          "description": "Block C2 egress",
+          "action": "ufw deny out to $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1040.D3",
+          "description": "Rotate DB credentials",
+          "action": "mysql -e \"ALTER USER '$APP_USER'@'%' IDENTIFIED BY '$NEW_PW'; FLUSH PRIVILEGES;\"",
+          "impact_level": "Medium",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1040.D4",
+          "description": "Network-isolate the host",
+          "action": "ufw default deny incoming && ufw default deny outgoing",
+          "impact_level": "Critical",
+          "effectiveness": "Critical"
+        }
+      ],
+      "Compute": [
+        {
+          "mitigation_id": "M1040.C1",
+          "description": "Kill reverse shell processes",
+          "action": "pkill -9 -f 'bash -i' ; pkill -9 -f 'nc -e'",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1040.C2",
+          "description": "Block C2 egress",
+          "action": "ufw deny out to $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1040.C3",
+          "description": "Cordon and drain the node",
+          "action": "kubectl cordon $NODE && kubectl drain $NODE --ignore-daemonsets --delete-emptydir-data",
+          "impact_level": "High",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1040.C4",
+          "description": "Isolate node and rotate kubelet certs",
+          "action": "ufw default deny outgoing && kubeadm certs renew all",
+          "impact_level": "Critical",
+          "effectiveness": "Critical"
+        }
+      ],
+      "Identity": [
+        {
+          "mitigation_id": "M1040.I1",
+          "description": "Kill reverse shell processes",
+          "action": "pkill -9 -f 'bash -i' ; pkill -9 -f 'nc -e'",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1040.I2",
+          "description": "Block C2 egress",
+          "action": "ufw deny out to $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1040.I3",
+          "description": "Revoke all active sessions and tokens",
+          "action": "kubectl -n iam exec deploy/keycloak -- /opt/keycloak/bin/kcadm.sh delete sessions --realm master",
+          "impact_level": "High",
+          "effectiveness": "Critical"
+        },
+        {
+          "mitigation_id": "M1040.I4",
+          "description": "Network-isolate the identity host",
+          "action": "ufw default deny incoming && ufw default deny outgoing",
+          "impact_level": "Critical",
+          "effectiveness": "Critical"
+        }
+      ],
+      "Security": [
+        {
+          "mitigation_id": "M1040.S1",
+          "description": "Kill reverse shell processes",
+          "action": "pkill -9 -f 'bash -i' ; pkill -9 -f 'nc -e'",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1040.S2",
+          "description": "Block C2 egress",
+          "action": "ufw deny out to $SOURCE_IP",
+          "impact_level": "Low",
+          "effectiveness": "High"
+        },
+        {
+          "mitigation_id": "M1040.S3",
+          "description": "Enable auditd process accounting",
+          "action": "systemctl enable --now auditd && auditctl -a always,exit -F arch=b64 -S execve",
+          "impact_level": "Low",
+          "effectiveness": "Medium"
+        },
+        {
+          "mitigation_id": "M1040.S4",
+          "description": "Isolate host, preserve monitoring uplink",
+          "action": "ufw default deny outgoing && ufw allow out to 10.163.1.125",
+          "impact_level": "High",
+          "effectiveness": "Critical"
+        }
+      ]
+    }
+  }
+}

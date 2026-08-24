@@ -1,0 +1,181 @@
+from fastapi import FastAPI
+from threat_model import generate_threat_model
+import requests
+from requests.exceptions import RequestException
+import json
+import os
+import uvicorn
+
+
+# Placeholder asset metadata
+Asset_ID = "1"
+Asset_Name = "Server"
+Asset_Type = "DNS Server"
+
+def load_config(filename):
+    if os.path.exists(filename):
+        with open(filename, 'r') as f:
+            return json.load(f)
+    return {}
+
+def mitigation_knowledge_based(attack_type):
+    # KB (Ditto :8080) is not deployed — use default mitigations directly.
+    # Re-enable the block below to look mitigations up from the KB.
+    mitigation_actions = ['filter_network_traffic']
+
+    # config = load_config('config.json')
+    # mitigation_url = config.get('KB_mitigation_url', 'http://localhost')
+    # mitigation_port = config.get('KB_mitigation_port', 8080)
+    #
+    # url = f"{mitigation_url}:{mitigation_port}/mitigations"
+    # payload = {
+    #     "threat": {"type": attack_type}
+    # }
+    #
+    # try:
+    #     response = requests.post(url, json=payload, timeout=5)
+    #     if response.status_code == 200:
+    #         mitigation_actions = response.json().get("mitigation", mitigation_actions)
+    # except RequestException as e:
+    #     print(f"KB Connection Error: {e}. Using default mitigations.")
+
+    return mitigation_actions
+
+def send_output(json_schema):
+    config = load_config('config.json')
+    sandbox_url = config.get('sandbox_output_url', 'http://localhost')
+    sandbox_port = config.get('sandbox_output_port', 5000)
+    sandbox_endpoint = config.get('sandbox_endpoint', 'fetch_json')
+    
+    api_url = f"{sandbox_url}:{sandbox_port}/{sandbox_endpoint}"
+    try:    
+        requests.post(api_url, json=json_schema, timeout=5)
+    except RequestException:
+        pass  # Sandbox not running — non-fatal
+
+def log_to_file(message):
+    with open("log", "a") as f:
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        f.write(f"[{timestamp}] {message}\n")
+
+app = FastAPI(
+    title="PETA",
+    description="Predictive tool for attack impact estimation",
+)
+
+@app.post("/PETA/sdt/impact", description="Attack impact analysis")
+def SDT_attack_impact_analysis(cyber_attack: dict): 
+    # Extract Attack Info
+    attack_data = cyber_attack.get("cyber_attack", {})
+    attack_type = attack_data.get("type", "Unknown")
+    target_asset_id = attack_data.get("targeted_asset") # New: Extract the pointer
+    
+    vector = attack_data.get("vector", {})
+    timestamp = vector.get("attack_timestamp")
+    location = vector.get("attack_location")
+    
+    # Extract Topology Info
+    assets_data = cyber_attack.get("organization_assets", {})
+    topology = assets_data.get("topology")
+    
+    if topology:
+        nodes = topology.get("nodes", [])
+        links = topology.get("links", [])
+    else:
+        # Fallback to single asset
+        nodes = [{"id": Asset_ID, "name": Asset_Name, "type": Asset_Type, "ip": vector.get("asset_ip_address", "0.0.0.0")}]
+        links = []
+        target_asset_id = Asset_ID
+
+    # Get Mitigations
+    mitigations = mitigation_knowledge_based(attack_type)
+    
+    # Generate JSON Threat Model with Context
+    model = generate_threat_model(nodes, links, attack_type, location, timestamp, mitigations, target_asset_id)
+    
+    # Save to file
+    with open("threat_model.json", "w") as f:
+        json.dump(model, f, indent=2)
+
+    # Send to Sandbox
+    send_output(model)
+    
+    return model
+
+
+
+@app.post("/PETA/cobalt/impact", description="Attack impact analysis")
+def COBALT_attack_impact_analysis(cyber_attack: dict):
+    # Extract Attack Info (consistent with /sdt-topo/)
+    attack_data = cyber_attack.get("cyber_attack", {})
+    attack_type = attack_data.get("type", "SQL_Injection")
+    target_node_id = attack_data.get("targeted_asset", "nc-pod-ditto")
+    
+    vector = attack_data.get("vector", {})
+    timestamp = vector.get("attack_timestamp", "2024-06-01T12:00:00Z")
+    location = vector.get("attack_location", "Offline Analysis")
+    
+    # 1. Load local topology (already converted PETA format)
+    topology_path = "cobalt_topology.json"
+    if not os.path.exists(topology_path):
+        # Fallback to ncsrd_topology_peta.json for testing if cobalt doesn't exist yet
+        topology_path = "ncsrd_topology_peta.json"
+        
+    if not os.path.exists(topology_path):
+        return {"error": "Topology file not found"}
+    
+    with open(topology_path, 'r') as f:
+        topology_data = json.load(f).get("topology", {})
+    
+    nodes = topology_data.get("nodes", [])
+    links = topology_data.get("links", [])
+    
+    # 2. Get Mitigations
+    mitigations = mitigation_knowledge_based(attack_type)
+    
+    # 3. Generate Threat Model
+    model = generate_threat_model(
+        nodes=nodes,
+        links=links,
+        attack_type=attack_type,
+        attack_location=location,
+        attack_timestamp=timestamp,
+        mitigation_list=mitigations,
+        target_node_id=target_node_id
+    )
+
+    
+    # 4. Save to file
+    with open("threat_model.json", "w") as f:
+        json.dump(model, f, indent=2)
+
+    # 5. Logging
+    threat_model_data = model.get("threat_model", {})
+    metadata = threat_model_data.get("metadata", {})
+    impacted_asset = metadata.get("targeted_asset")
+    
+    control_action = threat_model_data.get("control_action", {})
+    mitigation_action = control_action.get("mitigation_action", {})
+    selected = mitigation_action.get("selected_mitigation", {})
+    action_desc = selected.get("description", "No mitigation selected")
+    
+    log_to_file(f"Asset: {impacted_asset}, Action: {action_desc}")
+    log_to_file("Incident reported to authorities")
+    
+    return model
+
+@app.get("/PETA/threat_model", description="Retrieve the latest generated threat model")
+def Threat_model_with_mitigation_actions():
+    if os.path.exists("threat_model.json"):
+        with open("threat_model.json", 'r') as f:
+            return json.load(f)
+    return {"error": "No model found"}
+
+# # Keep legacy endpoint for compatibility but return JSON
+# @app.get("/PETA/sdt/legacy")
+# def SDT_XML_Schema(cyber_attack: dict):
+#     return SDT_attack_impact_analysis(cyber_attack)
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

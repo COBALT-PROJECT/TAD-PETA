@@ -1,0 +1,8 @@
+# TAD + PETA
+scikit-learn>=1.3
+joblib
+pandas
+numpy
+fastapi
+uvicorn
+requests
