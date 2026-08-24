@@ -156,12 +156,13 @@ def trigger_peta(attack_type, target_ip, peta_url, mock_target_id=None,
     # 1. Topology straight from the PETA file (already PETA-format)
     topology = cached_topology if cached_topology is not None else load_peta_topology()
 
-    # 2. Resolve the victim IP to a topology node id
+    # 2. Resolve the victim IP to a topology node id. If it's not a managed
+    # asset, name it honestly (unmanaged:<ip>) rather than silently blaming the
+    # first node in the file — that misattributed every unplaceable victim.
     target_id = mock_target_id or _resolve_target_id(target_ip, topology)
     if not target_id:
-        nodes = topology.get("topology", {}).get("nodes", [])
-        target_id = nodes[0]["id"] if nodes else "unknown-asset"
-        logging.warning(f"[TOPO] {target_ip} not in topology — defaulting to {target_id}")
+        target_id = f"unmanaged:{target_ip}"
+        logging.warning(f"[TOPO] {target_ip} not a managed asset — target={target_id}")
 
     payload = {
         "cyber_attack": {
@@ -276,7 +277,8 @@ def _dispatch(res, peta_url, topology_cache, output_url=None):
     if res["label"] == "benign":
         return
     if res["dispatch"]:
-        target_ip = _resolve_target_ip(res["src_ip"], res["dst_ip"], topology_cache)
+        target_ip, _ = _resolve_target_ip(res["src_ip"], res["dst_ip"],
+                                          topology_cache, res.get("peta_type"))
         logging.warning(
             f"ATTACK DETECTED [{res['label']}] conf={res['confidence']:.2f} | "
             f"src={res['src_ip']} dst={res['dst_ip']} | target={target_ip} | "
@@ -291,22 +293,38 @@ def _dispatch(res, peta_url, topology_cache, output_url=None):
         )
 
 
-def _resolve_target_ip(src_ip, dst_ip, topology_cache):
-    """Return the victim-side IP, using the PETA-format topology.
+def _resolve_target_ip(src_ip, dst_ip, topology_cache, peta_type=None):
+    """Return (victim_ip, is_managed) using the PETA-format topology.
 
-    The DESTINATION is checked first: it is the asset being attacked, while the
-    source is the attacker (and is often not a managed asset at all). Only if
-    the destination is unknown do we fall back to the source — that covers a
-    compromised internal host acting as the origin.
+    Which side is the victim depends on the attack DIRECTION:
+      * Host_Compromise (reverse shell / post-exploitation) usually runs
+        victim -> attacker, so the compromised internal host is the SOURCE.
+        If the source isn't managed (attacker -> victim command flow), fall
+        back to the destination.
+      * Everything else (scan / brute-force / DoS) targets the DESTINATION;
+        the source is the attacker, so we do NOT fall back to it — an outbound
+        scan to an external IP must resolve to that external (unmanaged) IP,
+        not to the internal scanner.
+
+    is_managed is False when the victim isn't one of our topology assets
+    (external or unlisted). Callers alert-only on those instead of mitigating a
+    machine we don't own.
     """
     nodes = (topology_cache or {}).get("topology", {}).get("nodes", [])
     known = {n.get("ip") for n in nodes if n.get("ip")}
-    for candidate in (dst_ip, src_ip):          # victim first
-        if candidate and candidate in known:
-            return candidate
-    # Fallback: prefer an internal address
-    return next((ip for ip in (dst_ip, src_ip) if ip and ip.startswith("10.")),
-                dst_ip or src_ip or "10.0.0.10")
+
+    if peta_type == "Host_Compromise":
+        primary, secondary = src_ip, dst_ip
+    else:
+        primary, secondary = dst_ip, src_ip
+
+    if primary and primary in known:
+        return primary, True
+    # For a compromise, the victim may be the other side (attacker -> victim).
+    if peta_type == "Host_Compromise" and secondary and secondary in known:
+        return secondary, True
+    # Victim side isn't a managed asset -> report it honestly (no nodes[0] guess).
+    return (primary or secondary or "unknown"), False
 
 
 def _predict_and_dispatch(feat_vec, src_ip, model, label_encoder, peta_url, topology_cache):
@@ -325,7 +343,7 @@ def _predict_and_dispatch(feat_vec, src_ip, model, label_encoder, peta_url, topo
         logging.info(f"[TAD/flow] predicted={prediction} | src={src_ip} | peta={peta_attack}")
 
         if peta_attack:
-            target_ip = _resolve_target_ip(src_ip, src_ip, topology_cache)
+            target_ip, _ = _resolve_target_ip(src_ip, src_ip, topology_cache, peta_attack)
             logging.warning(
                 f"ATTACK DETECTED [{prediction}] | src={src_ip} | target={target_ip} "
                 f"| Triggering PETA ({peta_attack})..."
@@ -482,7 +500,8 @@ def main():
                             if peta_attack:
                                 src_ip = str(row.get("src_ip", ""))
                                 dst_ip = str(row.get("dst_ip", ""))
-                                target_ip = _resolve_target_ip(src_ip, dst_ip, topology_cache)
+                                target_ip, _ = _resolve_target_ip(src_ip, dst_ip,
+                                                                  topology_cache, peta_attack)
                                 logging.warning(
                                     f"ATTACK DETECTED [{prediction}] | src={src_ip} "
                                     f"dst={dst_ip} | target={target_ip} | Triggering PETA ({peta_attack})..."

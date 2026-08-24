@@ -220,6 +220,16 @@ unchanged — only how often PETA is called. Watch it live with `GET /active`.
 A new `(attack_type, target)`, a new victim, or the same attack after the cooldown all
 dispatch immediately — only exact repeats within the window are folded.
 
+### Victim resolution & external targets
+
+TAD picks the victim by attack **direction**: scan / brute-force / DoS → the
+**destination**; `Host_Compromise` (reverse shell / post-exploitation) → the
+compromised **internal** host (usually the source, since it dials out to the
+attacker). If the resolved victim isn't a managed asset in the topology
+(external IP, or an unlisted host), it is **alerted, not mitigated** — logged as
+`ALERT_EXTERNAL` and counted as `external` — so PETA only ever acts on machines
+you own. It no longer silently blames the first node in the topology file.
+
 ## Confidence gate
 
 Mitigations are real (ban IPs, drop traffic), so TAD will not fire one on a shaky

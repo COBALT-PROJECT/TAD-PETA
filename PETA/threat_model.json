@@ -2,9 +2,9 @@
   "threat_model": {
     "id": "tm_8b2c65n3dr87345s54gd746b7h83t82k",
     "metadata": {
-      "timestamp": "2026-08-05T11:28:27Z",
+      "timestamp": "2026-08-24T11:53:38Z",
       "source": "Internal",
-      "targeted_asset": "ncsrd-cobalt"
+      "targeted_asset": "ncsrd-ccmui"
     },
     "cyber_attack": {
       "type": "Host_Compromise",
@@ -342,7 +342,7 @@
           "impact_level": "Low",
           "effectiveness": "High",
           "_calculated_score": 170,
-          "_target_node_id": "ncsrd-cobalt"
+          "_target_node_id": "ncsrd-ccmui"
         }
       }
     }

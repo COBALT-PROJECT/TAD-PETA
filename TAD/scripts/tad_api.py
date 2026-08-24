@@ -74,7 +74,7 @@ _cfg: dict[str, Any] = {"dispatch": False, "peta_url": None, "model": DEFAULT_MO
 _topology_cache = None
 _detect_log: "logging.Logger | None" = None
 _stats = {"packets": 0, "attacks": 0, "dispatched": 0, "suppressed": 0,
-          "low_confidence": 0, "alert_only": 0, "benign": 0}
+          "low_confidence": 0, "external": 0, "alert_only": 0, "benign": 0}
 
 # Live attacks: (peta_type, target_ip) -> aggregate. Bounded by #assets x #types
 # (~72), so the dict itself can't blow up; the per-entry source set is capped.
@@ -120,6 +120,7 @@ class IngestResponse(BaseModel):
     dispatched: int                 # PETA calls actually made
     suppressed: int = 0             # attack packets folded into an active attack
     low_confidence: int = 0         # attacks below the confidence gate (not dispatched)
+    external: int = 0               # victim not a managed asset -> alerted, not mitigated
     alert_only: int
 
 
@@ -190,17 +191,25 @@ def _log_detection(res: dict, action: str):
                  f"{pkt_field}peta={res['peta_type']}")
 
 
-def _dispatch_one(res: dict) -> bool:
-    """Aggregate one attack packet into its live-attack entry and dispatch to
-    PETA only if this (attack_type, target) is new or its cooldown has elapsed.
+def _dispatch_one(res: dict) -> str:
+    """Resolve the victim, then act. Returns one of:
+      "dispatched" - a PETA call was made for this (attack_type, victim)
+      "suppressed" - folded into an already-active attack (cooldown)
+      "external"   - victim isn't a managed asset -> alerted, not mitigated
 
-    Returns True if a PETA call was made, False if the packet was folded into an
-    already-active attack (suppressed). Collapsing the flood here is what keeps
-    /ingest real-time: 24k scan packets -> 1 PETA call, not 24k.
+    Collapsing floods (suppressed) keeps /ingest real-time; the external path
+    keeps PETA acting only on assets we own.
     """
     import realtime_monitor_v2 as rm
     src, dst = res["src_ip"], res["dst_ip"]
-    target_ip = rm._resolve_target_ip(src, dst, _topology_cache)
+    target_ip, is_managed = rm._resolve_target_ip(src, dst, _topology_cache,
+                                                  res["peta_type"])
+
+    # Q2: victim isn't one of our assets (external / unlisted) -> alert, no PETA.
+    if not is_managed:
+        _log_detection({**res, "dst_ip": target_ip}, "ALERT_EXTERNAL")
+        return "external"
+
     key = (res["peta_type"], target_ip)
     now = time.time()
 
@@ -220,7 +229,7 @@ def _dispatch_one(res: dict) -> bool:
             e["sources"].add(src)
         due = (now - e["last_dispatch"]) >= _cfg["dispatch_cooldown"]
         if not due:
-            return False                    # fold into the active attack, no call
+            return "suppressed"             # fold into the active attack, no call
 
     # Network I/O outside the lock. trigger_peta swallows its own errors -> None.
     result = rm.trigger_peta(res["peta_type"], target_ip, _cfg["peta_url"],
@@ -236,11 +245,11 @@ def _dispatch_one(res: dict) -> bool:
                 if sel:
                     e["mitigation"] = f"{sel.get('mitigation_id')} — {sel.get('description')}"
     _log_detection(res, "DISPATCHED" if result else "DISPATCH_ERR")
-    return True
+    return "dispatched"
 
 
-def _dispatch_results(results: list[dict], do_dispatch: bool) -> tuple[int, int, int, int, int]:
-    attacks = dispatched = alert_only = suppressed = low_conf = 0
+def _dispatch_results(results: list[dict], do_dispatch: bool) -> tuple[int, int, int, int, int, int]:
+    attacks = dispatched = alert_only = suppressed = low_conf = external = 0
     min_conf = _cfg["dispatch_min_confidence"]
     for res in results:
         if res["label"] == "benign":
@@ -262,12 +271,16 @@ def _dispatch_results(results: list[dict], do_dispatch: bool) -> tuple[int, int,
                     logging.warning(f"LOW-CONF [{res['label']}] conf={conf:.2f}"
                                     f"<{min_conf} src={res['src_ip']} -> not dispatched")
             elif do_dispatch:
-                if _dispatch_one(res):
+                outcome = _dispatch_one(res)
+                if outcome == "dispatched":
                     dispatched += 1
                     _stats["dispatched"] += 1
-                else:
+                elif outcome == "suppressed":
                     suppressed += 1
                     _stats["suppressed"] += 1
+                else:                        # "external" -> alerted, not mitigated
+                    external += 1
+                    _stats["external"] += 1
             else:
                 _log_detection(res, "ATTACK")
                 if _cfg["console_detections"]:
@@ -280,7 +293,7 @@ def _dispatch_results(results: list[dict], do_dispatch: bool) -> tuple[int, int,
             if _cfg["console_detections"]:
                 logging.warning(f"ALERT-ONLY [{res['label']}] src={res['src_ip']} -> "
                                 f"'{res['peta_type']}' not in attack_mapping.json")
-    return attacks, dispatched, alert_only, suppressed, low_conf
+    return attacks, dispatched, alert_only, suppressed, low_conf, external
 
 
 def _check_batch(n: int):
@@ -319,16 +332,16 @@ def _run(packets: list[dict], do_dispatch: bool) -> IngestResponse:
     with _lock:                                   # rolling state is not thread-safe
         results = _get_clf().classify_batch(packets)
         _stats["packets"] += len(packets)
-    attacks, dispatched, alert_only, suppressed, low_conf = \
+    attacks, dispatched, alert_only, suppressed, low_conf, external = \
         _dispatch_results(results, do_dispatch)
     if not _cfg["console_detections"]:
         logging.info(f"[batch] {len(results)} pkts | attacks={attacks} "
                      f"alert_only={alert_only} dispatched={dispatched} "
-                     f"suppressed={suppressed} low_conf={low_conf}")
+                     f"suppressed={suppressed} low_conf={low_conf} external={external}")
     return IngestResponse(
         count=len(results), predictions=[Prediction(**r) for r in results],
         attacks=attacks, dispatched=dispatched, suppressed=suppressed,
-        low_confidence=low_conf, alert_only=alert_only)
+        low_confidence=low_conf, external=external, alert_only=alert_only)
 
 
 # ── routes ───────────────────────────────────────────────────────────────────
