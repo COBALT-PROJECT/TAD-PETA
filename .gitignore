@@ -29,3 +29,4 @@ logs/
 data_collection/*.csv
 data_collection/metrics.txt
 data_collection/*_results.txt
+PETA/threat_model.json
