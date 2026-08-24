@@ -52,6 +52,8 @@ def main():
     ap.add_argument("--base", default=BASE_CSV, help="base training CSV to merge")
     ap.add_argument("--taxonomy", default="5class", choices=["8class", "5class", "binary"])
     ap.add_argument("--split", default="group", choices=["stratified", "group"])
+    ap.add_argument("--smote", action="store_true",
+                    help="oversample rare classes with SMOTE instead of class_weight")
     ap.add_argument("--out", default=os.path.join(HERE, "combined_dataset.csv"),
                     help="where to write the merged training CSV")
     ap.add_argument("--dry-run", action="store_true", help="merge + report only, don't train")
@@ -99,6 +101,8 @@ def main():
                PYTHONPATH=os.pathsep.join([SCRIPTS, existing_pp]) if existing_pp else SCRIPTS)
     cmd = [sys.executable, TRAINER, "--csv", a.out,
            "--taxonomy", a.taxonomy, "--split", a.split, "--model", "both"]
+    if a.smote:
+        cmd.append("--smote")
     print(f"[train] {' '.join(cmd)}\n")
     rc = subprocess.call(cmd, env=env)
     if rc != 0:

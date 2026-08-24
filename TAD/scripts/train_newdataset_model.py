@@ -197,6 +197,10 @@ def main():
     ap.add_argument("--cv", action="store_true", help="run 5-fold CV overfit diagnostic")
     ap.add_argument("--explain", action="store_true",
                     help="permutation importance + confusion/importance plots for best model")
+    ap.add_argument("--smote", action="store_true",
+                    help="oversample rare classes with SMOTE on the TRAIN split "
+                         "(data-level balancing; disables class_weight to avoid "
+                         "double-balancing). Default balancing is class_weight alone.")
     args = ap.parse_args()
 
     out_lines = [f"# New-dataset model — taxonomy={args.taxonomy}, split={args.split}\n"]
@@ -238,10 +242,31 @@ def main():
     out_lines.append(f"- split: {args.split}  (train {len(tr)} / test {len(te)})")
     X_tr, X_te, y_tr, y_te = X[tr], X[te], y[tr], y[te]
 
+    # Balancing strategy. Default: class_weight="balanced" (reweight the loss).
+    # --smote instead oversamples the TRAIN split (never the test split) and
+    # turns class_weight off so we don't balance twice.
+    cw = "balanced"
+    if args.smote:
+        from collections import Counter
+        from imblearn.over_sampling import SMOTE
+        min_n = min(Counter(y_tr).values())
+        if min_n < 2:
+            print(f"  [smote] skipped: smallest train class has {min_n} sample(s) (<2); "
+                  f"keeping class_weight")
+            out_lines.append(f"- SMOTE: skipped (smallest class {min_n} < 2)")
+        else:
+            k = min(5, min_n - 1)                # SMOTE needs k < smallest class
+            before = len(X_tr)
+            X_tr, y_tr = SMOTE(random_state=42, k_neighbors=k).fit_resample(X_tr, y_tr)
+            cw = None
+            print(f"  [smote] train {before} -> {len(X_tr)} rows (k_neighbors={k}); "
+                  f"class_weight disabled")
+            out_lines.append(f"- SMOTE: train {before} -> {len(X_tr)} rows (k={k})")
+
     results = []
     trained = {}
     if args.model in ("rf", "both"):
-        rf = RandomForestClassifier(n_estimators=300, class_weight="balanced",
+        rf = RandomForestClassifier(n_estimators=300, class_weight=cw,
                                     n_jobs=-1, random_state=42)
         m, r = train_one("Random Forest", rf, X_tr, X_te, y_tr, y_te, classes, out_lines)
         trained["rf"] = m; results.append(r)
@@ -249,7 +274,7 @@ def main():
         # early_stopping off: its internal validation split fails when a class
         # has <2 training samples (8class micro-classes)
         hgb = HistGradientBoostingClassifier(max_iter=400, learning_rate=0.06,
-                                             max_depth=8, class_weight="balanced",
+                                             max_depth=8, class_weight=cw,
                                              early_stopping=False, random_state=42)
         try:
             m, r = train_one("Hist Gradient Boosting", hgb, X_tr, X_te, y_tr, y_te,
@@ -267,10 +292,10 @@ def main():
     if args.cv:
         if best_key == "rf":
             factory = lambda: RandomForestClassifier(n_estimators=300,
-                        class_weight="balanced", n_jobs=-1, random_state=42)
+                        class_weight=cw, n_jobs=-1, random_state=42)
         else:
             factory = lambda: HistGradientBoostingClassifier(max_iter=400,
-                        learning_rate=0.06, max_depth=8, class_weight="balanced",
+                        learning_rate=0.06, max_depth=8, class_weight=cw,
                         early_stopping=False, random_state=42)
         diagnose_overfit(factory, X_tr, y_tr, tag, out_lines)
     if args.explain:
