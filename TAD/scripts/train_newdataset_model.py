@@ -288,6 +288,7 @@ def main():
     out_lines.append(f"Artifact: `{os.path.relpath(art_path, TAD_ROOT)}`")
 
     report = os.path.join(DATA_DIR, f"train_results_{args.taxonomy}_{args.split}.md")
+    os.makedirs(DATA_DIR, exist_ok=True)          # report dir may not exist in a fresh checkout
     with open(report, "w") as f:
         f.write("\n".join(out_lines))
     print(f"Saved report -> {report}")

@@ -81,16 +81,25 @@ the model false-alarming on normal traffic).
 Sanity-check the printed distribution. If it's all benign, it's almost always a
 timezone mismatch (step 0) or a wrong `--attacker` IP.
 
-## 4. Retrain
+## 4. Retrain (one command)
 
-Collect several runs (vary timing, background load, intensity), concatenate the
-`labelled.csv` files with the existing capture, and retrain:
+Collect several runs (vary timing, background load, intensity), then:
 
 ```bash
-cat labelled_run1.csv <(tail -n +2 labelled_run2.csv) ... > combined.csv
-# then point train_model_multiclass.py at combined.csv (see TAD/scripts)
+python3 retrain.py labelled_run1.csv labelled_run2.csv ...
 ```
 
-Keep the label taxonomy the model expects: `benign`, `nmap_scan`,
-`hydra_bruteforce`, `post_exploitation`, `stress_test`. The phase→label mapping
-lives at the top of [label_capture.py](label_capture.py) (`PHASE_LABELS`).
+[retrain.py](retrain.py) merges your labelled CSV(s) with the existing training
+set, **backs up the current model** (retraining overwrites
+`hgb_newdataset_5class.joblib`), and runs the project trainer to produce a new
+drop-in artifact. Then restart the stack (`./run_all.sh`) to load it.
+
+- `--no-base` — train on the new data only (heavier weight on live traffic, but
+  risks forgetting the old distribution)
+- `--dry-run` — merge + show the label mix without training
+- roll back — the script prints the backup path; `cp backup-*/*.joblib` over the
+  model dir
+
+Keep the taxonomy the model expects: `benign`, `nmap_scan`, `hydra_bruteforce`,
+`post_exploitation`, `stress_test`. The phase→label mapping lives at the top of
+[label_capture.py](label_capture.py) (`PHASE_LABELS`).
