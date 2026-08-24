@@ -24,3 +24,8 @@ logs/
 .DS_Store
 .idea/
 .vscode/
+
+# --- Data collection artifacts (captures + attack timing) ---
+data_collection/*.csv
+data_collection/metrics.txt
+data_collection/*_results.txt
