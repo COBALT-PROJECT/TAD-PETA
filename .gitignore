@@ -30,3 +30,7 @@ data_collection/*.csv
 data_collection/metrics.txt
 data_collection/*_results.txt
 PETA/threat_model.json
+
+# Attack script — holds a plaintext SSH password, never commit
+data_collection/cronattack2.py
+data_collection/cronAttack2.py
