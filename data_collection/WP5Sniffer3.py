@@ -73,7 +73,7 @@ TARGET_HOSTS = [
     "10.163.1.122",  # VM 1089 (sdtm)
     "10.163.1.123",  # cobalt
     "10.163.1.125",  # VM 1084 (watchtower)
-#    "10.163.1.126",  # VM 1082 (sdt / TAD-PETA)
+    "10.163.1.126",  # VM 1082 (sdt / TAD-PETA) — dummy target for collection (collect-only!)
     "10.163.1.127",  # VM 1077 (Clouditor / orchestrator)
 #   "10.163.1.128",  # VM 1049 (Worker2)
 #   "10.163.1.129",  # VM 1033 (Worker1)

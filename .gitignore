@@ -34,3 +34,7 @@ PETA/threat_model.json
 # Attack script — holds a plaintext SSH password, never commit
 data_collection/cronattack2.py
 data_collection/cronAttack2.py
+
+# per-run attack-timing artifacts
+data_collection/metricrun*.txt
+data_collection/combined_dataset.csv

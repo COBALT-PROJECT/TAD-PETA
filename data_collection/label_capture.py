@@ -62,12 +62,20 @@ def load_windows(metrics_path, tz_offset_hours):
     return windows
 
 
-def label_for(t, src, dst, windows, attackers, use_attacker_filter):
+def label_for(t, src, dst, sport, dport, windows, attackers, use_attacker_filter,
+              benign_ports):
     for start, end, label in windows:
         if start <= t < end:
-            if not use_attacker_filter or src in attackers or dst in attackers:
-                return label
-            return "benign"            # in-window but not attacker traffic -> benign
+            if use_attacker_filter and not (src in attackers or dst in attackers):
+                return "benign"        # in-window but not attacker traffic -> benign
+            # De-contaminate: the benign traffic generator runs on the attacker
+            # host and hammers these HTTP ports. Inside a NON-stress window that
+            # traffic is the generator (benign), NOT the attack — stress is the
+            # only legitimate attack on those ports. Reclassify it to benign.
+            if (label != "stress_test" and benign_ports
+                    and (sport in benign_ports or dport in benign_ports)):
+                return "benign"
+            return label
     return "benign"
 
 
@@ -83,9 +91,14 @@ def main():
                          "(0 after applying the record_phase UTC fix)")
     ap.add_argument("--no-attacker-filter", action="store_true",
                     help="label purely by time window (don't require attacker in flow)")
+    ap.add_argument("--benign-ports", default="8080,8090",
+                    help="HTTP ports the benign generator uses; attacker traffic to "
+                         "these OUTSIDE a stress window is re-labelled benign "
+                         "(fixes generator-on-attacker contamination). '' to disable.")
     a = ap.parse_args()
 
     attackers = set(a.attacker)
+    benign_ports = {int(p) for p in a.benign_ports.split(",") if p.strip().isdigit()}
     windows = load_windows(a.metrics, a.tz_offset_hours)
     print(f"loaded {len(windows)} attack windows; attacker(s)={sorted(attackers)} "
           f"filter={'off' if a.no_attacker_filter else 'on'}")
@@ -104,8 +117,12 @@ def main():
                 t = parse_iso(row["packet_time_utc"])
             except (KeyError, ValueError):
                 row["label"] = "benign"; writer.writerow(row); counts["benign"] += 1; continue
+            def _port(v):
+                try: return int(v)
+                except (TypeError, ValueError): return -1
             lab = label_for(t, row.get("src_ip"), row.get("dst_ip"),
-                            windows, attackers, not a.no_attacker_filter)
+                            _port(row.get("src_port")), _port(row.get("dst_port")),
+                            windows, attackers, not a.no_attacker_filter, benign_ports)
             # diagnostic: was this packet inside a window but reclassified benign?
             if lab == "benign" and not a.no_attacker_filter:
                 for s, e, _ in windows:
