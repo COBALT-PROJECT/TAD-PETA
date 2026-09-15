@@ -4,18 +4,31 @@ Detects attacks in network traffic (TAD) and selects a mitigation for the affect
 asset (PETA). **SDT / Eclipse Ditto are not part of this workflow** — the topology is
 read from a local file and the finished threat model is POSTed to an output endpoint.
 
-```
- traffic ──POST──► TAD :8002 ──► 5-class model ──► PETA :8000 ──► threat model
-                        │        (dedup per attack)                     │
-                   GET /active                              POST to OUTPUT_URL (optional)
-```
-
 | | |
 |---|---|
 | TAD ingest | `POST http://<host>:8002/ingest/raw` |
 | Live attack view | `GET http://<host>:8002/active` |
 | PETA | `:8000` (called by TAD, not directly) |
 | **OUTPUT_URL** | **empty by default → delivery skipped. Set it to POST threat models to a consumer.** |
+
+---
+
+## Architecture
+
+```mermaid
+graph LR
+    SRC["Traffic / collector"] -->|"POST /ingest/raw"| TAD["TAD :8002\n5-class model\ndedup per attack"]
+    TAD -->|"GET /active"| LIVE["Live attack view"]
+    TAD -->|"confidence ≥ dispatch-min-confidence\n(throttled by dispatch-cooldown)"| PETA["PETA :8000\nscoring engine"]
+    TAD -.->|"below confidence threshold"| LOWCONF["detections.log\nLOW_CONF (alert-only)"]
+    PETA -->|"threat model"| OUT["OUTPUT_URL\n(optional consumer, empty = skip)"]
+```
+
+TAD scores every packet but only calls PETA once per `(attack_type, target)` per
+cooldown window — see *Dispatch de-duplication* below. Detections below
+`--dispatch-min-confidence` are logged but never dispatched — see *Confidence gate*.
+No SDT / Eclipse Ditto in this loop: topology comes from a local file, and delivery
+of the finished threat model is a plain optional `POST` to `OUTPUT_URL`.
 
 ---
 
