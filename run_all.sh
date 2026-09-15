@@ -32,6 +32,12 @@ WATCHDOG="${WATCHDOG:-1}"          # 1 = auto-restart crashed services
 CHECK_EVERY="${CHECK_EVERY:-5}"    # seconds between health checks
 MIN_CONF="${MIN_CONF:-0.7}"        # don't fire a mitigation below this confidence (0..1)
 COOLDOWN="${COOLDOWN:-30}"         # min seconds between PETA calls per (attack, target)
+# Sustained-attack gate: require this many attack packets per (attack,victim)
+# within SUSTAIN_WINDOW seconds before dispatching. Filters scattered false
+# positives on benign traffic (a real attack floods; an FP is a few packets).
+# SUSTAIN_MIN=0 disables. See tad_api.py for the measured 100/30s calibration.
+SUSTAIN_MIN="${SUSTAIN_MIN:-100}"
+SUSTAIN_WINDOW="${SUSTAIN_WINDOW:-30}"
 
 start_peta() {
   ( cd PETA && "$PY" -m uvicorn main:app --port "$PETA_PORT" --host 0.0.0.0 \
@@ -51,12 +57,14 @@ wait_for_peta() {
 
 start_tad() {
   "$PY" TAD/scripts/tad_api.py --port "$TAD_PORT" \
-      --model TAD/models/multiclass/hgb_newdataset_5class.joblib \
+      --model TAD/models/multiclass/hgb_newdataset_4class.joblib \
       --dispatch \
       --peta-url "http://127.0.0.1:$PETA_PORT/PETA/sdt/impact" \
       --output-url "$OUTPUT_URL" \
       --dispatch-min-confidence "$MIN_CONF" \
       --dispatch-cooldown "$COOLDOWN" \
+      --sustain-min "$SUSTAIN_MIN" \
+      --sustain-window "$SUSTAIN_WINDOW" \
       --log-file "$DETECT_LOG" \
       --quiet-console >> "$SERVER_LOG" 2>&1 &
   TAD_PID=$!

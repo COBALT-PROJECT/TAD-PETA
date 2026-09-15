@@ -37,6 +37,7 @@ import os
 import sys
 import threading
 import time
+from collections import deque
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -51,14 +52,24 @@ logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(levelname)s - %(message)s")
 
 DEFAULT_MODEL = os.path.join(SCRIPT_DIR, "..", "models", "multiclass",
-                             "hgb_newdataset_5class.joblib")
+                             "hgb_newdataset_4class.joblib")
+DEFAULT_GNN_MODEL = os.path.join(SCRIPT_DIR, "..", "models", "gnn", "victim_sage.pt")
 
 app = FastAPI(title="TAD Ingest API", version="1.0")
 
 # ── runtime state ────────────────────────────────────────────────────────────
 _clf: "ndi.PacketClassifier | None" = None
 _lock = threading.Lock()          # classifier state is mutable -> serialise
+
+# GNN victim-ID: a CONFIRMING signal alongside _resolve_target_ip, never a
+# dependency. _graph is always created (cheap, no torch); _gnn_scorer stays
+# None if the artifact is missing/disabled/fails to load, and every call site
+# checks for that -- the pipeline must keep dispatching correctly with it off.
+_graph = None
+_gnn_scorer = None
+
 _cfg: dict[str, Any] = {"dispatch": False, "peta_url": None, "model": DEFAULT_MODEL,
+        "gnn_model": DEFAULT_GNN_MODEL,
         # hard cap on rows per request. Without it an unbounded `rows` array is
         # itself a DoS vector (one huge POST -> OOM). 413 tells the client to split.
         "max_batch": 10_000, "output_url": None, "topology_file": None,
@@ -69,12 +80,21 @@ _cfg: dict[str, Any] = {"dispatch": False, "peta_url": None, "model": DEFAULT_MO
         # confidence gate: below this the prediction is too uncertain to fire a
         # real (IP-banning / traffic-dropping) mitigation -> logged alert-only.
         "dispatch_min_confidence": 0.7,
+        # SUSTAINED-ATTACK gate: a real attack is a flood (hundreds of packets
+        # per window); a false positive on benign traffic is a few scattered
+        # packets. Require >= sustain_min attack packets for one (attack_type,
+        # victim) within the last sustain_window seconds before EVER dispatching.
+        # Measured on a real capture: real attacks peaked 140-1471 pkts/30s per
+        # class, every false positive stayed <= 82 -- so 100/30s cleanly
+        # separates them. Set sustain_min=0 to disable (revert to per-packet).
+        "sustain_min": 100, "sustain_window": 30.0,
         # detection logging
         "log_format": "text", "log_benign": False, "console_detections": True}
 _topology_cache = None
 _detect_log: "logging.Logger | None" = None
 _stats = {"packets": 0, "attacks": 0, "dispatched": 0, "suppressed": 0,
-          "low_confidence": 0, "external": 0, "alert_only": 0, "benign": 0}
+          "low_confidence": 0, "external": 0, "alert_only": 0, "benign": 0,
+          "unconfirmed": 0}
 
 # Live attacks: (peta_type, target_ip) -> aggregate. Bounded by #assets x #types
 # (~72), so the dict itself can't blow up; the per-entry source set is capped.
@@ -156,6 +176,35 @@ def _get_clf() -> "ndi.PacketClassifier":
     return _clf
 
 
+def _get_graph():
+    """Streaming host graph for the GNN victim scorer. Always created (cheap,
+    no torch import) so /victims and the dispatch log can check it even if
+    the GNN model itself never loaded."""
+    global _graph
+    if _graph is None:
+        import gnn_victim_id as gvi
+        _graph = gvi.HostGraphState()
+    return _graph
+
+
+def _try_load_gnn(model_path: str):
+    """Best-effort GNN load. Any failure here (missing file, bad artifact,
+    torch/torch_geometric not installed) must NOT stop the API from serving
+    HGB detections -- logs a warning and leaves _gnn_scorer as None."""
+    global _gnn_scorer
+    if not model_path or not os.path.exists(model_path):
+        logging.info(f"[TAD-API] no GNN model at {model_path} -- victim "
+                     f"confirmation disabled (HGB detection/dispatch unaffected)")
+        return
+    try:
+        import gnn_victim_id as gvi
+        _gnn_scorer = gvi.GNNVictimScorer(model_path)
+        logging.info(f"[TAD-API] GNN victim scorer loaded from {model_path}")
+    except Exception as e:
+        logging.warning(f"[TAD-API] GNN scorer failed to load ({e}) -- victim "
+                        f"confirmation disabled, HGB detection/dispatch unaffected")
+
+
 def _log_detection(res: dict, action: str):
     """Write ONE detection to the detection log (file), if configured.
 
@@ -176,34 +225,54 @@ def _log_detection(res: dict, action: str):
         lag = round((now - pkt_dt).total_seconds(), 1)     # processing lag, seconds
     else:
         pkt_iso, lag = None, None
+    gnn_conf = res.get("gnn_victim_confidence")
     if _cfg["log_format"] == "jsonl":
         log.info(json.dumps({
             "ts": ts, "pkt_time": pkt_iso, "lag_s": lag,
             "label": res["label"], "peta_type": res["peta_type"],
             "confidence": round(res["confidence"], 4) if res["confidence"] is not None else None,
             "src_ip": res["src_ip"], "dst_ip": res["dst_ip"], "action": action,
+            "gnn_victim_confidence": round(gnn_conf, 4) if gnn_conf is not None else None,
         }))
     else:
         conf = f"{res['confidence']:.3f}" if res["confidence"] is not None else "n/a"
         pkt_field = f"pkt={pkt_iso} lag={lag}s " if pkt_iso else ""
+        gnn_field = f" gnn_victim={gnn_conf:.3f}" if gnn_conf is not None else ""
         log.info(f"{ts} {action:<11} {res['label']:<18} conf={conf} "
                  f"src={res['src_ip']:<15} dst={res['dst_ip']:<15} "
-                 f"{pkt_field}peta={res['peta_type']}")
+                 f"{pkt_field}peta={res['peta_type']}{gnn_field}")
 
 
 def _dispatch_one(res: dict) -> str:
     """Resolve the victim, then act. Returns one of:
-      "dispatched" - a PETA call was made for this (attack_type, victim)
-      "suppressed" - folded into an already-active attack (cooldown)
-      "external"   - victim isn't a managed asset -> alerted, not mitigated
+      "dispatched"  - a PETA call was made for this (attack_type, victim)
+      "suppressed"  - folded into an already-active attack (cooldown)
+      "unconfirmed" - detected but below the sustained-attack volume gate
+                      (a few scattered packets, not a flood) -> not dispatched
+      "external"    - victim isn't a managed asset -> alerted, not mitigated
 
     Collapsing floods (suppressed) keeps /ingest real-time; the external path
-    keeps PETA acting only on assets we own.
+    keeps PETA acting only on assets we own; the unconfirmed path stops a
+    single misclassified benign packet from firing a real mitigation.
     """
     import realtime_monitor_v2 as rm
     src, dst = res["src_ip"], res["dst_ip"]
     target_ip, is_managed = rm._resolve_target_ip(src, dst, _topology_cache,
                                                   res["peta_type"])
+
+    # GNN victim confirmation -- CONFIRMING signal only, never gates dispatch.
+    # Scored here (not per-packet): _dispatch_one is already cooldown-rate-
+    # limited, so this stays cheap even under a flood.
+    gnn_conf = None
+    if _gnn_scorer is not None:
+        import gnn_victim_id as gvi
+        graph = _get_graph()
+        if graph.attack_pkt_count(target_ip) >= gvi.MIN_RELIABLE_ATTACK_PKTS:
+            try:
+                scores = _gnn_scorer.score(graph)
+                gnn_conf = scores.get(target_ip)
+            except Exception as e:
+                logging.warning(f"[gnn] scoring failed ({e}); continuing without it")
 
     # Q2: victim isn't one of our assets (external / unlisted) -> alert, no PETA.
     if not is_managed:
@@ -220,16 +289,39 @@ def _dispatch_one(res: dict) -> str:
                 "peta_type": res["peta_type"], "target_ip": target_ip,
                 "label": res["label"], "first_seen": now, "last_seen": now,
                 "last_dispatch": 0.0, "packets": 0, "sources": set(),
-                "mitigation": None,
+                "mitigation": None, "gnn_victim_confidence": None,
+                # sliding window of recent attack-packet timestamps for this
+                # (type, victim), for the sustained-volume gate below.
+                "recent": deque(), "recent_count": 0,
             }
         e["packets"] += 1
         e["last_seen"] = now
         e["label"] = res["label"]
+        if gnn_conf is not None:
+            e["gnn_victim_confidence"] = round(gnn_conf, 4)
         if len(e["sources"]) < 1024:        # cap: a spoofed DDoS must not OOM here
             e["sources"].add(src)
+
+        # Sustained-attack gate: prune the window, then require enough recent
+        # attack packets before this (type, victim) may dispatch at all. Blocks
+        # scattered false positives; a real flood crosses instantly. Once
+        # crossed it stays dispatchable (cooldown then governs rate).
+        win = _cfg["sustain_window"]
+        recent = e["recent"]
+        recent.append(now)
+        while recent and now - recent[0] > win:
+            recent.popleft()
+        e["recent_count"] = len(recent)
+        if _cfg["sustain_min"] > 0 and len(recent) < _cfg["sustain_min"] \
+                and e["last_dispatch"] == 0.0:
+            return "unconfirmed"            # not enough volume yet -> don't mitigate
+
         due = (now - e["last_dispatch"]) >= _cfg["dispatch_cooldown"]
         if not due:
             return "suppressed"             # fold into the active attack, no call
+
+    if _cfg["console_detections"] and gnn_conf is not None:
+        logging.warning(f"GNN victim confirmation: {target_ip} p(victim)={gnn_conf:.3f}")
 
     # Network I/O outside the lock. trigger_peta swallows its own errors -> None.
     result = rm.trigger_peta(res["peta_type"], target_ip, _cfg["peta_url"],
@@ -244,7 +336,8 @@ def _dispatch_one(res: dict) -> str:
                              .get("mitigation_action", {}).get("selected_mitigation", {}))
                 if sel:
                     e["mitigation"] = f"{sel.get('mitigation_id')} — {sel.get('description')}"
-    _log_detection(res, "DISPATCHED" if result else "DISPATCH_ERR")
+    _log_detection({**res, "gnn_victim_confidence": gnn_conf},
+                   "DISPATCHED" if result else "DISPATCH_ERR")
     return "dispatched"
 
 
@@ -278,6 +371,10 @@ def _dispatch_results(results: list[dict], do_dispatch: bool) -> tuple[int, int,
                 elif outcome == "suppressed":
                     suppressed += 1
                     _stats["suppressed"] += 1
+                elif outcome == "unconfirmed":
+                    # detected but below the sustained-volume gate -> not a
+                    # confirmed attack yet. Counted separately, not dispatched.
+                    _stats["unconfirmed"] += 1
                 else:                        # "external" -> alerted, not mitigated
                     external += 1
                     _stats["external"] += 1
@@ -332,12 +429,19 @@ def _run(packets: list[dict], do_dispatch: bool) -> IngestResponse:
     with _lock:                                   # rolling state is not thread-safe
         results = _get_clf().classify_batch(packets)
         _stats["packets"] += len(packets)
+        if _gnn_scorer is not None:
+            graph = _get_graph()
+            for pkt, res in zip(packets, results):
+                graph.update(pkt, res["label"])
+    _unconf_before = _stats["unconfirmed"]
     attacks, dispatched, alert_only, suppressed, low_conf, external = \
         _dispatch_results(results, do_dispatch)
+    unconfirmed = _stats["unconfirmed"] - _unconf_before
     if not _cfg["console_detections"]:
         logging.info(f"[batch] {len(results)} pkts | attacks={attacks} "
                      f"alert_only={alert_only} dispatched={dispatched} "
-                     f"suppressed={suppressed} low_conf={low_conf} external={external}")
+                     f"suppressed={suppressed} unconfirmed={unconfirmed} "
+                     f"low_conf={low_conf} external={external}")
     return IngestResponse(
         count=len(results), predictions=[Prediction(**r) for r in results],
         attacks=attacks, dispatched=dispatched, suppressed=suppressed,
@@ -427,10 +531,17 @@ def health():
         "dispatch_enabled": _cfg["dispatch"],
         "dispatch_cooldown_s": _cfg["dispatch_cooldown"],
         "dispatch_min_confidence": _cfg["dispatch_min_confidence"],
+        "sustain_min_packets": _cfg["sustain_min"],
+        "sustain_window_s": _cfg["sustain_window"],
         "active_timeout_s": _cfg["active_timeout"],
         "max_batch": _cfg["max_batch"],
         "detection_log": getattr(_detect_log, "name", None) if _detect_log else None,
         "recommended_batch": "200-500 rows per request",
+        "gnn_victim_id": {
+            "loaded": _gnn_scorer is not None,
+            "model": os.path.basename(_cfg["gnn_model"]) if _cfg.get("gnn_model") else None,
+            "trained_on_hosts": getattr(_gnn_scorer, "trained_on_hosts", None),
+        },
     }
 
 
@@ -465,19 +576,70 @@ def active():
                 "ongoing_seconds": round(now - e["first_seen"], 1),
                 "idle_seconds": round(now - e["last_seen"], 1),
                 "packets": e["packets"],
+                "recent_packets": e.get("recent_count", 0),   # in sustain window
+                "confirmed": e["last_dispatch"] > 0.0,         # crossed the volume gate
                 "sources": len(e["sources"]),
                 "mitigation": e["mitigation"],
+                "gnn_victim_confidence": e.get("gnn_victim_confidence"),
             })
     out.sort(key=lambda a: a["ongoing_seconds"], reverse=True)
     return {"as_of": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "sustain_min_packets": _cfg["sustain_min"],
+            "sustain_window_s": _cfg["sustain_window"],
             "count": len(out), "active_attacks": out}
+
+
+@app.get("/victims")
+def victims():
+    """GNN victim-confidence ranking over every host with any predicted-attack
+    traffic so far this run -- the live 'pinpoint the victim' view. This is a
+    CONFIRMING signal alongside /active's deterministic target_ip resolution,
+    not a replacement for it; 503 if the GNN model never loaded (HGB
+    detection/dispatch keep working either way).
+    """
+    if _gnn_scorer is None:
+        raise HTTPException(503, "GNN victim scorer not loaded -- see /health "
+                                 "for why (gnn_victim_id.loaded=false)")
+    import gnn_victim_id as gvi
+    graph = _get_graph()
+    scores = _gnn_scorer.score(graph)
+    reliable = set(graph.attack_hosts(gvi.MIN_RELIABLE_ATTACK_PKTS))
+    watching = set(graph.attack_hosts(1)) - reliable
+
+    # Same known-managed-asset gate _resolve_target_ip uses for real dispatch:
+    # without it, the attacker box itself ranks as a "victim" -- it's the
+    # destination of its own targets' reply traffic within the same
+    # attack-labelled window, so its features look victim-shaped too. This
+    # was observed live (10.163.1.105 scored 0.95 with 942 attack packets
+    # seen -- plenty of evidence, just structurally ambiguous without this
+    # gate). Falls back to no gate (with a flag in the response) only if
+    # topology wasn't loaded, e.g. --dispatch wasn't passed.
+    known_assets = None
+    if _topology_cache:
+        known_assets = {n.get("ip") for n in
+                        _topology_cache.get("topology", {}).get("nodes", []) if n.get("ip")}
+        reliable &= known_assets
+        watching &= known_assets
+
+    ranked = sorted(
+        ({"ip": ip, "victim_probability": round(p, 4),
+          "attack_packets_seen": graph.attack_pkt_count(ip)}
+         for ip, p in scores.items() if ip in reliable),
+        key=lambda r: r["victim_probability"], reverse=True)
+    return {"as_of": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "trained_on_hosts": _gnn_scorer.trained_on_hosts,
+            "min_reliable_attack_packets": gvi.MIN_RELIABLE_ATTACK_PKTS,
+            "known_asset_gate_applied": known_assets is not None,
+            "count": len(ranked), "victims": ranked,
+            "insufficient_data_yet": sorted(watching)}
 
 
 @app.post("/reset")
 def reset():
-    global _clf
+    global _clf, _graph
     with _lock:
         _clf = None
+        _graph = None          # GNN scorer itself stays loaded; only the accumulated graph resets
         for k in _stats:
             _stats[k] = 0
     with _active_lock:
@@ -502,6 +664,14 @@ def main():
     ap.add_argument("--dispatch-min-confidence", type=float, default=0.7,
                     help="don't fire a mitigation below this confidence (0..1); "
                          "the detection is still logged as LOW_CONF (alert-only)")
+    ap.add_argument("--sustain-min", type=int, default=100,
+                    help="SUSTAINED-ATTACK gate: require this many attack packets "
+                         "for one (attack_type, victim) within --sustain-window "
+                         "seconds before dispatching. Blocks scattered false "
+                         "positives on benign traffic; a real flood crosses "
+                         "instantly. 0 disables (revert to per-packet dispatch).")
+    ap.add_argument("--sustain-window", type=float, default=30.0,
+                    help="rolling window (seconds) for the --sustain-min count")
     ap.add_argument("--max-batch", type=int, default=10_000,
                     help="reject requests with more rows than this (HTTP 413)")
     ap.add_argument("--log-file", default=None,
@@ -522,6 +692,13 @@ def main():
                     help="PETA-format topology file (SDT is not used)")
     ap.add_argument("--server-log", default=None,
                     help="also mirror server/console logs to this file")
+    ap.add_argument("--gnn-model", default=DEFAULT_GNN_MODEL,
+                    help="victim-ID GNN artifact from train_gnn_victim.py "
+                         "(default: TAD/models/gnn/victim_sage.pt if present). "
+                         "A confirming signal only -- HGB detection/dispatch work "
+                         "identically whether or not this loads.")
+    ap.add_argument("--no-gnn", action="store_true",
+                    help="disable the victim-ID GNN even if --gnn-model exists")
     args = ap.parse_args()
 
     _cfg.update(model=args.model, dispatch=args.dispatch, peta_url=args.peta_url,
@@ -530,7 +707,9 @@ def main():
                 dispatch_cooldown=args.dispatch_cooldown,
                 active_timeout=args.active_timeout,
                 dispatch_min_confidence=args.dispatch_min_confidence,
-                console_detections=not args.quiet_console)
+                sustain_min=args.sustain_min, sustain_window=args.sustain_window,
+                console_detections=not args.quiet_console,
+                gnn_model=None if args.no_gnn else args.gnn_model)
     if args.server_log:
         fh = logging.handlers.RotatingFileHandler(
             args.server_log, maxBytes=args.log_max_mb * 1024 * 1024,
@@ -543,14 +722,19 @@ def main():
     else:
         logging.warning("[TAD-API] no --log-file: detections are console-only")
     _get_clf()
+    if _cfg["gnn_model"]:
+        _try_load_gnn(_cfg["gnn_model"])
     if args.dispatch:
         import realtime_monitor_v2 as rm
         # SDT not used: topology comes from the local PETA file
         _topology_cache = rm.load_peta_topology(args.topology_file)
+        sustain_desc = (f"{args.sustain_min} pkts/{args.sustain_window}s"
+                        if args.sustain_min > 0 else "DISABLED (per-packet)")
         logging.info(f"[TAD-API] PETA dispatch ENABLED -> {args.peta_url} "
                      f"(cooldown={args.dispatch_cooldown}s, "
                      f"active_timeout={args.active_timeout}s, "
-                     f"min_confidence={args.dispatch_min_confidence})")
+                     f"min_confidence={args.dispatch_min_confidence}, "
+                     f"sustained-attack gate={sustain_desc})")
     else:
         logging.info("[TAD-API] dispatch disabled (detections logged only)")
 

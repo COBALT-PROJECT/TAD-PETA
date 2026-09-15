@@ -2,7 +2,10 @@
 newdataset_inference.py
 =======================
 Production inference wrapper for the per-packet NewDataset model
-(`hgb_newdataset_5class.joblib` / `hgb_newdataset_binary.joblib`, 30 features).
+(`hgb_newdataset_4class.joblib` / `hgb_newdataset_binary.joblib`, 30 features).
+`hgb_newdataset_5class.joblib` (adds `post_exploitation`) also loads fine here
+if passed explicitly via `--model` / `model_path` — the wrapper reads the
+artifact's own `taxonomy` field rather than assuming one.
 
 WHY THIS EXISTS
 ---------------
@@ -39,7 +42,7 @@ USAGE
 
   # library use:
   from newdataset_inference import PacketClassifier
-  clf = PacketClassifier("TAD/models/multiclass/hgb_newdataset_5class.joblib")
+  clf = PacketClassifier("TAD/models/multiclass/hgb_newdataset_4class.joblib")
   res = clf.classify(packet_dict)
 """
 
@@ -63,7 +66,7 @@ logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(levelname)s - %(message)s")
 
 MODELS_DIR = os.path.join(SCRIPT_DIR, "..", "models", "multiclass")
-DEFAULT_MODEL = os.path.join(MODELS_DIR, "hgb_newdataset_5class.joblib")
+DEFAULT_MODEL = os.path.join(MODELS_DIR, "hgb_newdataset_4class.joblib")
 DEFAULT_CSV = os.path.join(SCRIPT_DIR, "..", "data", "NewDataset15062026",
                            "labeled_packets_deep.csv")
 

@@ -13,7 +13,7 @@ Adds vs the original:
   * per-row failures log at WARNING, not DEBUG (they used to vanish).
 
     python3 TAD/scripts/realtime_monitor_v2.py \
-        --model TAD/models/multiclass/hgb_newdataset_5class.joblib \
+        --model TAD/models/multiclass/hgb_newdataset_4class.joblib \
         --csv TAD/data/NewDataset15062026/labeled_packets_deep.csv
 """
 

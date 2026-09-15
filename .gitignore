@@ -24,17 +24,21 @@ logs/
 .DS_Store
 .idea/
 .vscode/
+*.orig
 
-# --- Data collection artifacts (captures + attack timing) ---
-data_collection/*.csv
-data_collection/metrics.txt
-data_collection/*_results.txt
+# --- Data collection (attack scripts, wordlists, captures, timing runs) ---
+# Whole directory ignored on request: has held plaintext creds before
+# (cronattack copy.py, smol.txt) and mixes real code with regenerated
+# run artifacts. If a script here needs to be back in version control,
+# add a targeted `!data_collection/<file>` exception instead of dropping
+# this line.
+data_collection/
+demo_capture.csv
+metricrun*.txt
 PETA/threat_model.json
 
-# Attack script — holds a plaintext SSH password, never commit
-data_collection/cronattack2.py
-data_collection/cronAttack2.py
+# Regenerated model backups
+TAD/models/multiclass/backup-*/
 
-# per-run attack-timing artifacts
-data_collection/metricrun*.txt
-data_collection/combined_dataset.csv
+# Python caches
+__pycache__/

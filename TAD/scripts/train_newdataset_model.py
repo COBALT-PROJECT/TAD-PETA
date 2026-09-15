@@ -14,6 +14,8 @@ Taxonomies:
   8class  — all 8 fine-grained labels (micro-classes unlearnable, expect low tail F1)
   5class  — collapse the 4 post-exploit labels into `post_exploitation`
             (benign, stress_test, nmap_scan, hydra_bruteforce, post_exploitation)
+  4class  — drop post-exploitation rows entirely
+            (benign, stress_test, nmap_scan, hydra_bruteforce)
   binary  — benign vs attack
 
 Split modes:
@@ -62,7 +64,7 @@ POST_EXPLOIT = {"ssh_connection", "reconnaissance_commands",
 
 
 def collapse_labels(labels: pd.Series, taxonomy: str) -> pd.Series:
-    if taxonomy == "8class":
+    if taxonomy in ("8class", "4class"):
         return labels
     if taxonomy == "5class":
         return labels.apply(lambda l: "post_exploitation" if l in POST_EXPLOIT else l)
@@ -188,7 +190,7 @@ def explain(model, X_te, y_te, feat_names, classes, y_pred, tag, out_lines):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv", default=DEFAULT_CSV)
-    ap.add_argument("--taxonomy", choices=["8class", "5class", "binary"], default="5class")
+    ap.add_argument("--taxonomy", choices=["8class", "5class", "4class", "binary"], default="4class")
     ap.add_argument("--split", choices=["stratified", "group"], default="group")
     ap.add_argument("--features", choices=["base", "rich"], default="rich",
                     help="rich = base 21 features + rolling per-source context")
@@ -212,6 +214,12 @@ def main():
     # are no-ops. This makes the per-packet + rolling features STREAMING-equivalent:
     # a live wrapper processing packets in arrival order reproduces them exactly.
     adapted = adapted.sort_values("timestamp", kind="stable").reset_index(drop=True)
+    if args.taxonomy == "4class":
+        exclude = POST_EXPLOIT | {"post_exploitation"}
+        before = len(adapted)
+        adapted = adapted[~adapted["label"].isin(exclude)].reset_index(drop=True)
+        print(f"  [4class] dropped {before - len(adapted)} post-exploitation rows "
+              f"({before} -> {len(adapted)})")
     print(f"  packets: {len(adapted)}")
 
     # build_features already appends build_rolling_context (30 features total:
