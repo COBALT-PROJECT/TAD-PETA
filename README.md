@@ -16,19 +16,77 @@ read from a local file and the finished threat model is POSTed to an output endp
 ## Architecture
 
 ```mermaid
-graph LR
-    SRC["Traffic / collector"] -->|"POST /ingest/raw"| TAD["TAD :8002\n5-class model\ndedup per attack"]
-    TAD -->|"GET /active"| LIVE["Live attack view"]
-    TAD -->|"confidence ≥ dispatch-min-confidence\n(throttled by dispatch-cooldown)"| PETA["PETA :8000\nscoring engine"]
-    TAD -.->|"below confidence threshold"| LOWCONF["detections.log\nLOW_CONF (alert-only)"]
-    PETA -->|"threat model"| OUT["OUTPUT_URL\n(optional consumer, empty = skip)"]
+graph TD
+    subgraph Traffic_Source ["Traffic Source"]
+        COL["Collector\n(send_test_traffic.py or your own sender)"]
+    end
+
+    subgraph TAD_Cluster ["TAD :8002 — Detection (tad_api.py)"]
+        ING["/ingest/raw, /ingest"]
+        FEAT["Feature extraction\n30 features — 9 rolling stats\nover each src_ip's last 20 packets"]
+        MODEL["HGB model\ndefault: 4-class (post_exploitation dropped)\n--model: 5-class artifact also loads"]
+        GATE["Confidence gate\n--dispatch-min-confidence (0.7)"]
+        VICTIM["Victim resolution (deterministic)\nscan/brute/DoS → destination\nHost_Compromise → internal source"]
+        GNN["GNN victim scorer — confirming only\nvictim_sage.pt, needs ≥10 attack pkts\nnever gates dispatch"]
+        SUSTAIN["Sustained-attack gate\n--sustain-min/-window (100 pkts/30s)\nblocks single misclassified packets"]
+        DEDUP["Dispatch cooldown\n--dispatch-cooldown (30s) per (type,target)"]
+        ACTIVE["GET /active\nlive attacks + GNN confidence"]
+        VICTIMS["GET /victims\nGNN-only victim ranking"]
+    end
+
+    subgraph PETA_Cluster ["PETA :8000 — Mitigation (PETA/main.py)"]
+        API["PETA API"]
+        SCORE["Scoring engine\neffectiveness × impact × criticality\n+ upstream traversal"]
+        MAP["attack_mapping.json\nMITRE-aligned mitigations"]
+        TOPO["ncsrd_topology_peta.json\nlocal file, 18 VMs"]
+    end
+
+    subgraph Delivery ["Delivery / Logs"]
+        OUT["OUTPUT_URL\noptional POST, empty = skip"]
+        LOGS["detections.log / server.log / peta.log\nlogs/&lt;timestamp&gt;/"]
+    end
+
+    COL -->|"1. POST /ingest/raw"| ING --> FEAT --> MODEL
+    MODEL -.->|"conf < threshold → LOW_CONF"| LOGS
+    MODEL -->|"2. conf ≥ threshold"| VICTIM
+    VICTIM -.->|"confirming score"| GNN
+    GNN -.-> ACTIVE
+    GNN -.-> VICTIMS
+    VICTIM -.->|"external / unmanaged → ALERT_EXTERNAL"| LOGS
+    VICTIM -->|"3. managed asset"| SUSTAIN
+    SUSTAIN -.->|"< volume threshold → unconfirmed"| LOGS
+    SUSTAIN -->|"4. crossed threshold"| DEDUP
+    DEDUP -.->|"repeat within cooldown → suppressed"| LOGS
+    DEDUP --> ACTIVE
+    DEDUP -->|"5. new (attack_type,target)\nor cooldown expired"| API
+    API -->|"6. lookup mitigations"| MAP
+    API -->|"6. asset context"| TOPO
+    MAP --> SCORE
+    TOPO --> SCORE
+    SCORE -->|"7. best mitigation\n(checks upstream node if better)"| API
+    API -->|"8. threat model + mitigation plan"| OUT
 ```
 
-TAD scores every packet but only calls PETA once per `(attack_type, target)` per
-cooldown window — see *Dispatch de-duplication* below. Detections below
-`--dispatch-min-confidence` are logged but never dispatched — see *Confidence gate*.
-No SDT / Eclipse Ditto in this loop: topology comes from a local file, and delivery
-of the finished threat model is a plain optional `POST` to `OUTPUT_URL`.
+**The numbered path is the hot path** (packet → dispatch → mitigation); dotted lines are
+the side-effects and confirming signals around it:
+
+- **Confidence gate** — below `--dispatch-min-confidence`, logged as `LOW_CONF`, never dispatched.
+- **GNN victim scorer** — a *confirming* signal only (`victim_sage.pt`), scored once a
+  target has ≥10 attack packets; it never blocks or redirects dispatch, it just annotates
+  `/active` and ranks candidates on `/victims`. Detection/dispatch work identically if it
+  never loads.
+- **Sustained-attack gate** — a real flood crosses `--sustain-min` packets in
+  `--sustain-window` seconds almost instantly; scattered false positives on benign
+  background traffic don't. Below threshold → `unconfirmed`, not dispatched. This is what
+  stops a single misclassified packet from firing a real mitigation.
+- **External/unmanaged victim** → alerted, not mitigated (`ALERT_EXTERNAL`) — PETA only
+  ever acts on assets in the topology.
+- **Cooldown dedup** — a repeat within `--dispatch-cooldown` is folded into `suppressed`
+  instead of re-calling PETA — see *Dispatch de-duplication*.
+
+No SDT / Eclipse Ditto anywhere in this loop: topology comes from the local
+`ncsrd_topology_peta.json`, and delivery of the finished threat model is a plain optional
+`POST` to `OUTPUT_URL`.
 
 ---
 
@@ -133,8 +191,16 @@ DDoS shows a large `suppressed` and a tiny `dispatched`; that is correct.
 | `stress_test` | `Denial_of_Service` | `nft add rule inet filter input ip saddr $SOURCE_IP drop` |
 | `nmap_scan` | `Port_Scan` | `fail2ban-client set portscan banip $SOURCE_IP` |
 | `hydra_bruteforce` | `Brute_Force` | `fail2ban-client set sshd banip $SOURCE_IP` |
-| `post_exploitation` | `Host_Compromise` | `ufw deny out to $SOURCE_IP` |
+| `post_exploitation` | `Host_Compromise` | `ufw deny out to $SOURCE_IP` — **5-class model only** (see below) |
 | `benign` | — | ignored |
+
+**Model default is 4-class** (`hgb_newdataset_4class.joblib`) — `post_exploitation` is
+dropped entirely, not just relabeled, because held-out-host testing showed it didn't
+generalize to an unseen victim IP; the class was data-starved (~874 samples) and hurt
+overall reliability more than it helped. The 5-class artifact
+(`hgb_newdataset_5class.joblib`) still trains and loads fine — pass
+`--model TAD/models/multiclass/hgb_newdataset_5class.joblib` to `tad_api.py` (or set it
+in `run_all.sh`) if you need that class back.
 
 PETA picks the mitigation by `effectiveness` vs `impact × criticality`, and can apply it
 **upstream** — e.g. a DoS on `mysql` (criticality 9) is mitigated at the frontend rather
@@ -167,6 +233,10 @@ Contexts: `Frontend`, `Database`, `Compute`, `Identity`, `Security`.
 | `--output-url` | empty | where the threat model is POSTed; empty = **skip delivery** (see note) |
 | `--dispatch-cooldown` | 30 | min seconds between PETA calls for the same `(attack_type, target)` — collapses scan/DDoS floods |
 | `--dispatch-min-confidence` | 0.7 | don't fire a mitigation below this confidence; detection still logged as `LOW_CONF` (alert-only) |
+| `--sustain-min` | 100 | packets required for one `(attack_type, victim)` within `--sustain-window` before it may ever dispatch; `0` disables (back to per-packet). Below it → `unconfirmed` |
+| `--sustain-window` | 30 | rolling window (seconds) for `--sustain-min` |
+| `--gnn-model` | `TAD/models/gnn/victim_sage.pt` | confirming-only victim-ID model; detection/dispatch work identically if it fails to load |
+| `--no-gnn` | off | disable the GNN scorer even if `--gnn-model` exists |
 | `--active-timeout` | 60 | seconds of silence before an attack drops off `/active` (its end time) |
 | `--topology-file` | `PETA/ncsrd_topology_peta.json` | asset topology (SDT not used) |
 | `--dispatch` | off | actually call PETA; without it, detections are logged only |
@@ -190,13 +260,16 @@ Contexts: `Frontend`, `Database`, `Compute`, `Identity`, `Security`.
 | `GET /ingest/raw` | liveness probe (returns 200 + usage; POST is the real route) |
 | `POST /ingest` | pre-normalized packets (epoch float, `frame_len`, uppercase protocol) |
 | `GET /active` | **attacks happening now** — one row per `(attack_type, target)`, deduped |
-| `GET /health` | model, classes, active sources, batch limits, cooldown settings |
-| `GET /stats` | counters incl. `dispatched` / `suppressed` |
-| `POST /reset` | clear per-source state and the live-attack table |
+| `GET /victims` | GNN-only victim-confidence ranking across every host with attack traffic this run — `503` if the GNN model never loaded |
+| `GET /health` | model, classes, active sources, batch limits, cooldown, sustain-gate and GNN-loaded status |
+| `GET /stats` | counters incl. `dispatched` / `suppressed` / `unconfirmed` / `external` / `low_confidence` |
+| `POST /reset` | clear per-source state and the live-attack table (GNN model itself stays loaded) |
 
 `GET /active` is the real-time view — each entry carries `started`, `ongoing_seconds`,
-`idle_seconds`, `packets`, `sources`, and the chosen `mitigation`. An entry disappears
-after `--active-timeout` seconds of silence.
+`idle_seconds`, `packets`, `recent_packets` (count inside the sustain window),
+`confirmed` (crossed the sustain gate), `sources`, `mitigation`, and
+`gnn_victim_confidence` if the GNN scored it. An entry disappears after
+`--active-timeout` seconds of silence.
 
 ---
 
@@ -243,6 +316,24 @@ attacker). If the resolved victim isn't a managed asset in the topology
 `ALERT_EXTERNAL` and counted as `external` — so PETA only ever acts on machines
 you own. It no longer silently blames the first node in the topology file.
 
+### Victim confirmation (GNN)
+
+`train_gnn_victim.py` produces `TAD/models/gnn/victim_sage.pt`, a graph-neural-network
+scorer TAD loads alongside the HGB classifier. It is **confirming-only** — deterministic
+resolution above always decides who gets mitigated; the GNN never gates, blocks, or
+redirects a dispatch, and everything works identically if it fails to load
+(`--no-gnn`, or just delete the file).
+
+- Scores a target once it has **≥10 attack packets** seen this run
+  (`MIN_RELIABLE_ATTACK_PKTS`) — too little evidence before that.
+- Attached to `/active` as `gnn_victim_confidence`, and separately rankable on
+  `GET /victims` (global, GNN-only view across every host with attack traffic so far).
+- `/victims` applies the same known-managed-asset gate as real dispatch — without it,
+  the attacker box itself can rank as a "victim" (it's the destination of its own
+  targets' reply traffic within the attack window, so its features look victim-shaped
+  too — observed live at 0.95 confidence, 942 attack packets). Falls back to no gate
+  only if topology wasn't loaded (e.g. `--dispatch` wasn't passed).
+
 ## Confidence gate
 
 Mitigations are real (ban IPs, drop traffic), so TAD will not fire one on a shaky
@@ -255,6 +346,32 @@ near-certain there (~1.0), but on real traffic ~40% of detections drop below 0.7
 (distribution shift). Without the gate, a 0.46-confidence "DDoS" toward a legitimate
 service (e.g. a CDN) would get that service blocked. Raise the threshold to act only on
 high-certainty detections; lower it (e.g. 0) to dispatch everything as before.
+
+## Sustained-attack gate
+
+Confidence alone wasn't enough: a live run against real background traffic (18 monitored
+hosts, not just the intended target) showed a **single misclassified packet** was enough
+to fire a real mitigation on an innocent host — the model was confident, just wrong on
+that one packet. Root cause wasn't unfamiliar traffic or a missing benign-traffic
+generator; it was dispatching on volume-1 evidence.
+
+The fix: TAD now requires **`--sustain-min` attack packets** for one
+`(attack_type, victim)` within a **`--sustain-window`-second** sliding window before it
+will *ever* dispatch that pair — default **100 packets / 30 seconds**. A real flood
+crosses that almost instantly; scattered false positives don't. Below threshold, the
+detection is logged and counted as `unconfirmed`, not dispatched — same spirit as
+`LOW_CONF`, different cause (volume, not model confidence). Once a pair crosses the gate
+once, it stays dispatchable; the cooldown above then governs how often.
+
+Validated by replaying a real capture at compressed speed with the gate on: **5
+dispatches, all against the real target, zero false positives** (versus dozens of
+false-positive dispatches with the gate off). `SUSTAIN_MIN=0 ./run_all.sh` reverts to the
+old per-packet behavior; `SUSTAIN_MIN=50` is more sensitive.
+
+> **Known trade-off, not fixed:** the threshold is calibrated to how aggressive
+> `cronattack2.py`'s own tools are (nmap/hydra/stress all flood well past 100/30s). A
+> deliberately slow, stealthy attack could stay under it and go undispatched. That's the
+> real precision/recall trade-off this knob controls.
 
 ## Detection log format
 
@@ -282,3 +399,9 @@ traffic `lag` ≈ 0 and rising lag is your early warning that TAD is falling beh
 - `realtime_monitor_v2.py` is the CSV-tailing alternative to the API. Use it, **not**
   `realtime_monitor.py` — the original builds only 10 features and fails silently with
   these 30-feature models. Both originals are included unmodified for reference.
+- **Doesn't yet generalize to an unseen victim IP.** Held-out-host testing (train with
+  one host's IP excluded entirely, test only on that host) confirmed the model does not
+  reliably transfer to a victim it never saw in training — this is a real gap, not a
+  theoretical one. More host diversity in training data is the open fix; see
+  `HANDOFF.md` for status. Until then, treat detections on hosts outside the training
+  set's victims with extra scrutiny.
