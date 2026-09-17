@@ -60,7 +60,7 @@ import pandas as pd
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
-from train_model_multiclass import PROTOCOL_MAP, build_features
+from train_model_multiclass import PAIR_K, PROTOCOL_MAP, build_features
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(levelname)s - %(message)s")
@@ -305,18 +305,25 @@ class PacketClassifier:
         f["ctx_pkt_rate"]  = n / dur
         f["ctx_bytes_rate"] = sum(flens) / dur
 
-        # ── bidirectional flow balance over this {src,dst} pair's last k pkts ──
-        # Mirrors _pair_balance() in train_model_multiclass.py EXACTLY: canonical
-        # direction A->B for the sorted pair, balance = min(fwd,rev)/max(fwd,rev).
+        # ── per-pair flow features over this {src,dst} pair's last PAIR_K pkts ─
+        # Mirrors _pair_features() in train_model_multiclass.py EXACTLY.
         a, b = str(pkt["src_ip"]), str(pkt["dst_ip"])
         pair = (a, b) if a <= b else (b, a)
+        p_fwd = a <= b
+        p_syn = bool((flags & 0x02) and not (flags & 0x10))   # SYN-only
+        p_sa  = bool((flags & 0x02) and (flags & 0x10))       # SYN-ACK
+        p_psh = bool(flags & 0x08)                            # data push
         pw = self._pair_wins.get(pair)
         if pw is None:
-            pw = self._pair_wins[pair] = deque(maxlen=self.k)
-        pw.append(a <= b)
-        pf = sum(pw); pr = len(pw) - pf
+            pw = self._pair_wins[pair] = deque(maxlen=PAIR_K)
+        pw.append((p_fwd, p_syn, p_sa, p_psh))
+        pf = sum(1 for r in pw if r[0]); pr = len(pw) - pf
         pmx = max(pf, pr)
         f["ctx_pair_balance"] = (min(pf, pr) / pmx) if pmx > 0 else 0.0
+        f["ctx_pair_replydata"] = sum(1 for r in pw if (not r[0]) and r[3]) / len(pw)
+        p_fsyn = sum(1 for r in pw if r[0] and r[1])
+        p_rsa  = sum(1 for r in pw if (not r[0]) and r[2])
+        f["ctx_pair_handshake"] = p_rsa / (p_fsyn + 1.0)
         return f
 
     def _decide(self, label, conf, packet) -> dict:

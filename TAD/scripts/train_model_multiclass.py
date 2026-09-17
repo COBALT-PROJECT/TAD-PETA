@@ -125,29 +125,49 @@ def _infer_multiclass_label(df: pd.DataFrame) -> pd.Series:
 
 # ── feature engineering ──────────────────────────────────────────────────────
 
-def _pair_balance(df: pd.DataFrame, k: int = 20) -> pd.Series:
-    """Per-packet bidirectional balance of its {src,dst} pair over that pair's
-    last k packets: min(fwd,rev)/max(fwd,rev). 0 = one-directional (DoS/scan
-    flood), ~1 = balanced conversation (a real service exchange). Processed in
-    the DataFrame's given (arrival/timestamp) order so PacketClassifier's live
-    per-pair state reproduces it byte-for-byte."""
+PAIR_K = 60          # rolling window (packets) for the per-pair flow features
+
+
+def _pair_features(df: pd.DataFrame, k: int = PAIR_K) -> pd.DataFrame:
+    """Per-{src,dst}-pair flow features over the pair's last k packets, the one
+    class of signal the per-source rolling stats cannot see -- whether traffic
+    is a one-way flood (DoS/scan) or a real two-way service exchange. Three
+    features, each verified (offline, Cohen's d) to separate benign K8s chatter
+    from real attack traffic better than balance alone:
+
+      ctx_pair_balance    min(fwd,rev)/max(fwd,rev)     ~0 one-way, ~1 balanced
+      ctx_pair_replydata  reverse-direction PSH share   server pushes data back
+      ctx_pair_handshake  reverse SYN-ACK / fwd SYN     new-connection activity
+
+    Computed in the DataFrame's given (arrival/timestamp) order so
+    PacketClassifier's live per-pair state reproduces it byte-for-byte."""
     src = df["src_ip"].astype(str).values
     dst = df["dst_ip"].astype(str).values
+    flags = df["tcp_flags"].apply(_parse_flags).values
     n = len(df)
-    out = np.zeros(n, dtype=np.float64)
+    bal = np.zeros(n); reply = np.zeros(n); hs = np.zeros(n)
     wins: dict = {}
     for i in range(n):
         a, b = src[i], dst[i]
         pair = (a, b) if a <= b else (b, a)
         fwd = a <= b                              # canonical direction A->B
+        fb = int(flags[i])
+        syn = (fb & 0x02) and not (fb & 0x10)     # SYN-only (connection attempt)
+        sa  = (fb & 0x02) and (fb & 0x10)         # SYN-ACK (handshake reply)
+        psh = fb & 0x08                           # data push
         w = wins.get(pair)
         if w is None:
             w = wins[pair] = deque(maxlen=k)
-        w.append(fwd)
-        f = sum(w); r = len(w) - f
-        mx = max(f, r)
-        out[i] = (min(f, r) / mx) if mx > 0 else 0.0
-    return pd.Series(out, index=df.index)
+        w.append((fwd, bool(syn), bool(sa), bool(psh)))
+        f = sum(1 for r in w if r[0]); rv = len(w) - f
+        mx = max(f, rv)
+        bal[i] = (min(f, rv) / mx) if mx > 0 else 0.0
+        reply[i] = sum(1 for r in w if (not r[0]) and r[3]) / len(w)
+        fsyn = sum(1 for r in w if r[0] and r[1])
+        rsa  = sum(1 for r in w if (not r[0]) and r[2])
+        hs[i] = rsa / (fsyn + 1.0)
+    return pd.DataFrame({"ctx_pair_balance": bal, "ctx_pair_replydata": reply,
+                         "ctx_pair_handshake": hs}, index=df.index)
 
 
 def build_rolling_context(df: pd.DataFrame, k: int = 20) -> pd.DataFrame:
@@ -281,12 +301,11 @@ def build_features(df: pd.DataFrame, k: int = 20) -> tuple[pd.DataFrame, list[st
     if "timestamp" in df.columns and "src_ip" in df.columns:
         ctx = build_rolling_context(df, k=k)
         feats = pd.concat([feats, ctx], axis=1)
-        # Bidirectional flow balance per unordered {src,dst} pair. A DoS/scan is
-        # one-directional (attacker floods victim, few replies) -> ~0; a benign
-        # service conversation is balanced two-way -> ~1. This is the one signal
-        # the per-source rolling features above cannot see. Computed in arrival
-        # (timestamp) order so the streaming extractor reproduces it exactly.
-        feats["ctx_pair_balance"] = _pair_balance(df, k=k)
+        # Per-pair bidirectional flow features (balance / reply-data / handshake)
+        # -- the one-way-flood vs two-way-conversation signal the per-source
+        # rolling features cannot see. Computed in arrival (timestamp) order so
+        # the streaming extractor reproduces them exactly.
+        feats = pd.concat([feats, _pair_features(df)], axis=1)
 
     return feats, list(feats.columns)
 

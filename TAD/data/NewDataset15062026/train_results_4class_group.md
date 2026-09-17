@@ -12,26 +12,26 @@
 ==================================================================
                   precision    recall  f1-score   support
 
-          benign     0.9981    0.9958    0.9969    216534
-hydra_bruteforce     0.8965    0.9595    0.9269      7960
-       nmap_scan     0.9531    0.9355    0.9442       434
-     stress_test     0.9951    0.9895    0.9923      9802
+          benign     0.9984    0.9945    0.9964    216534
+hydra_bruteforce     0.9046    0.9655    0.9341      7960
+       nmap_scan     0.9585    0.9585    0.9585       434
+     stress_test     0.9611    0.9915    0.9761      9802
 
-        accuracy                         0.9942    234730
-       macro avg     0.9607    0.9701    0.9651    234730
-    weighted avg     0.9944    0.9942    0.9943    234730
+        accuracy                         0.9933    234730
+       macro avg     0.9557    0.9775    0.9663    234730
+    weighted avg     0.9936    0.9933    0.9934    234730
 
-  overall accuracy   : 0.9942
-  balanced accuracy  : 0.9701   (macro-avg recall)
-  macro F1 (test)    : 0.9651
-  macro F1 (train)   : 0.9944   [train-test gap = +0.0293]
+  overall accuracy   : 0.9933
+  balanced accuracy  : 0.9775   (macro-avg recall)
+  macro F1 (test)    : 0.9663
+  macro F1 (train)   : 0.9962   [train-test gap = +0.0299]
 
   Confusion matrix (rows=true, cols=pred):
          benign  hydra_brut   nmap_scan  stress_tes
-    benign             215623         854          12          45
-    hydra_brutefor        315        7638           6           1
-    nmap_scan              12          14         406           2
-    stress_test            87          14           2        9699
+    benign             215340         790          13         391
+    hydra_brutefor        273        7685           2           0
+    nmap_scan               6          10         416           2
+    stress_test            70          10           3        9719
 
-**Best: Hist Gradient Boosting — macro-F1=0.9651, balanced-acc=0.9701, acc=0.9942**
+**Best: Hist Gradient Boosting — macro-F1=0.9663, balanced-acc=0.9775, acc=0.9933**
 Artifact: `models/multiclass/hgb_newdataset_4class.joblib`
