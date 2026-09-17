@@ -191,6 +191,10 @@ class PacketClassifier:
         self.idle_timeout = idle_timeout
         self.sweep_every = sweep_every
         self._state: OrderedDict[str, _SrcState] = OrderedDict()
+        # per unordered {src,dst} pair -> deque of canonical-direction bools,
+        # for ctx_pair_balance (bidirectional flow balance). #host-pairs is far
+        # smaller than #sources, so this stays bounded in practice.
+        self._pair_wins: dict[tuple, deque] = {}
         self._seen = 0
         self._max_ts = 0.0
         self.evicted = 0
@@ -300,6 +304,19 @@ class PacketClassifier:
         f["ctx_unique_dst_ports"] = float(len({d["dport"] for d in w}))
         f["ctx_pkt_rate"]  = n / dur
         f["ctx_bytes_rate"] = sum(flens) / dur
+
+        # ── bidirectional flow balance over this {src,dst} pair's last k pkts ──
+        # Mirrors _pair_balance() in train_model_multiclass.py EXACTLY: canonical
+        # direction A->B for the sorted pair, balance = min(fwd,rev)/max(fwd,rev).
+        a, b = str(pkt["src_ip"]), str(pkt["dst_ip"])
+        pair = (a, b) if a <= b else (b, a)
+        pw = self._pair_wins.get(pair)
+        if pw is None:
+            pw = self._pair_wins[pair] = deque(maxlen=self.k)
+        pw.append(a <= b)
+        pf = sum(pw); pr = len(pw) - pf
+        pmx = max(pf, pr)
+        f["ctx_pair_balance"] = (min(pf, pr) / pmx) if pmx > 0 else 0.0
         return f
 
     def _decide(self, label, conf, packet) -> dict:

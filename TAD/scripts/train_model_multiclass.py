@@ -25,6 +25,7 @@ Outputs (in TAD/models/multiclass/):
 import argparse
 import os
 import sys
+from collections import deque
 
 import joblib
 import matplotlib
@@ -123,6 +124,31 @@ def _infer_multiclass_label(df: pd.DataFrame) -> pd.Series:
 
 
 # ── feature engineering ──────────────────────────────────────────────────────
+
+def _pair_balance(df: pd.DataFrame, k: int = 20) -> pd.Series:
+    """Per-packet bidirectional balance of its {src,dst} pair over that pair's
+    last k packets: min(fwd,rev)/max(fwd,rev). 0 = one-directional (DoS/scan
+    flood), ~1 = balanced conversation (a real service exchange). Processed in
+    the DataFrame's given (arrival/timestamp) order so PacketClassifier's live
+    per-pair state reproduces it byte-for-byte."""
+    src = df["src_ip"].astype(str).values
+    dst = df["dst_ip"].astype(str).values
+    n = len(df)
+    out = np.zeros(n, dtype=np.float64)
+    wins: dict = {}
+    for i in range(n):
+        a, b = src[i], dst[i]
+        pair = (a, b) if a <= b else (b, a)
+        fwd = a <= b                              # canonical direction A->B
+        w = wins.get(pair)
+        if w is None:
+            w = wins[pair] = deque(maxlen=k)
+        w.append(fwd)
+        f = sum(w); r = len(w) - f
+        mx = max(f, r)
+        out[i] = (min(f, r) / mx) if mx > 0 else 0.0
+    return pd.Series(out, index=df.index)
+
 
 def build_rolling_context(df: pd.DataFrame, k: int = 20) -> pd.DataFrame:
     """
@@ -255,6 +281,12 @@ def build_features(df: pd.DataFrame, k: int = 20) -> tuple[pd.DataFrame, list[st
     if "timestamp" in df.columns and "src_ip" in df.columns:
         ctx = build_rolling_context(df, k=k)
         feats = pd.concat([feats, ctx], axis=1)
+        # Bidirectional flow balance per unordered {src,dst} pair. A DoS/scan is
+        # one-directional (attacker floods victim, few replies) -> ~0; a benign
+        # service conversation is balanced two-way -> ~1. This is the one signal
+        # the per-source rolling features above cannot see. Computed in arrival
+        # (timestamp) order so the streaming extractor reproduces it exactly.
+        feats["ctx_pair_balance"] = _pair_balance(df, k=k)
 
     return feats, list(feats.columns)
 

@@ -88,13 +88,20 @@ _cfg: dict[str, Any] = {"dispatch": False, "peta_url": None, "model": DEFAULT_MO
         # class, every false positive stayed <= 82 -- so 100/30s cleanly
         # separates them. Set sustain_min=0 to disable (revert to per-packet).
         "sustain_min": 100, "sustain_window": 30.0,
+        # GNN VETO gate: the victim-ID GNN is normally confirming-only, but when
+        # it has enough evidence (>= MIN_RELIABLE_ATTACK_PKTS) and is highly
+        # confident the resolved target is NOT a victim (score < this), suppress
+        # the dispatch instead of firing a mitigation on it. Catches the case
+        # where HGB mislabels benign traffic to a non-victim host. Set to 0 to
+        # disable (pure confirming-only behaviour).
+        "gnn_veto_threshold": 0.1,
         # detection logging
         "log_format": "text", "log_benign": False, "console_detections": True}
 _topology_cache = None
 _detect_log: "logging.Logger | None" = None
 _stats = {"packets": 0, "attacks": 0, "dispatched": 0, "suppressed": 0,
           "low_confidence": 0, "external": 0, "alert_only": 0, "benign": 0,
-          "unconfirmed": 0}
+          "unconfirmed": 0, "gnn_vetoed": 0}
 
 # Live attacks: (peta_type, target_ip) -> aggregate. Bounded by #assets x #types
 # (~72), so the dict itself can't blow up; the per-entry source set is capped.
@@ -249,11 +256,15 @@ def _dispatch_one(res: dict) -> str:
       "suppressed"  - folded into an already-active attack (cooldown)
       "unconfirmed" - detected but below the sustained-attack volume gate
                       (a few scattered packets, not a flood) -> not dispatched
+      "gnn_vetoed"  - GNN has evidence and is confident this is NOT a victim
+                      -> suppressed (HGB likely mislabeled benign traffic)
       "external"    - victim isn't a managed asset -> alerted, not mitigated
 
     Collapsing floods (suppressed) keeps /ingest real-time; the external path
     keeps PETA acting only on assets we own; the unconfirmed path stops a
-    single misclassified benign packet from firing a real mitigation.
+    single misclassified benign packet from firing a real mitigation; the
+    gnn_vetoed path lets the victim-ID GNN overrule a confident-but-wrong HGB
+    attack label on a host it can see is not actually under attack.
     """
     import realtime_monitor_v2 as rm
     src, dst = res["src_ip"], res["dst_ip"]
@@ -278,6 +289,16 @@ def _dispatch_one(res: dict) -> str:
     if not is_managed:
         _log_detection({**res, "dst_ip": target_ip}, "ALERT_EXTERNAL")
         return "external"
+
+    # GNN VETO: gnn_conf is not None only when the GNN had enough evidence
+    # (>= MIN_RELIABLE_ATTACK_PKTS). If it is then confident this host is NOT a
+    # victim, overrule HGB and suppress -- this is HGB mislabeling benign
+    # traffic to a non-victim host (e.g. monitoring chatter scored as a flood).
+    if (_cfg["gnn_veto_threshold"] > 0 and gnn_conf is not None
+            and gnn_conf < _cfg["gnn_veto_threshold"]):
+        _log_detection({**res, "dst_ip": target_ip,
+                        "gnn_victim_confidence": round(gnn_conf, 4)}, "GNN_VETO")
+        return "gnn_vetoed"
 
     key = (res["peta_type"], target_ip)
     now = time.time()
@@ -375,6 +396,9 @@ def _dispatch_results(results: list[dict], do_dispatch: bool) -> tuple[int, int,
                     # detected but below the sustained-volume gate -> not a
                     # confirmed attack yet. Counted separately, not dispatched.
                     _stats["unconfirmed"] += 1
+                elif outcome == "gnn_vetoed":
+                    # GNN overruled a confident-but-wrong HGB label -> suppressed.
+                    _stats["gnn_vetoed"] += 1
                 else:                        # "external" -> alerted, not mitigated
                     external += 1
                     _stats["external"] += 1
@@ -533,6 +557,7 @@ def health():
         "dispatch_min_confidence": _cfg["dispatch_min_confidence"],
         "sustain_min_packets": _cfg["sustain_min"],
         "sustain_window_s": _cfg["sustain_window"],
+        "gnn_veto_threshold": _cfg["gnn_veto_threshold"],
         "active_timeout_s": _cfg["active_timeout"],
         "max_batch": _cfg["max_batch"],
         "detection_log": getattr(_detect_log, "name", None) if _detect_log else None,
@@ -672,6 +697,13 @@ def main():
                          "instantly. 0 disables (revert to per-packet dispatch).")
     ap.add_argument("--sustain-window", type=float, default=30.0,
                     help="rolling window (seconds) for the --sustain-min count")
+    ap.add_argument("--gnn-veto-threshold", type=float, default=0.1,
+                    help="GNN VETO: when the victim-ID GNN has enough evidence "
+                         "and scores the resolved target below this (i.e. is "
+                         "confident it is NOT a victim), suppress the dispatch "
+                         "instead of firing a mitigation. Catches HGB mislabeling "
+                         "benign traffic to a non-victim host. 0 disables "
+                         "(GNN stays confirming-only).")
     ap.add_argument("--max-batch", type=int, default=10_000,
                     help="reject requests with more rows than this (HTTP 413)")
     ap.add_argument("--log-file", default=None,
@@ -708,6 +740,7 @@ def main():
                 active_timeout=args.active_timeout,
                 dispatch_min_confidence=args.dispatch_min_confidence,
                 sustain_min=args.sustain_min, sustain_window=args.sustain_window,
+                gnn_veto_threshold=args.gnn_veto_threshold,
                 console_detections=not args.quiet_console,
                 gnn_model=None if args.no_gnn else args.gnn_model)
     if args.server_log:

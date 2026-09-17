@@ -1,10 +1,10 @@
 # New-dataset model — taxonomy=4class, split=group
 
-- packets: 910745
+- packets: 991404
 - classes: [np.str_('benign'), np.str_('hydra_bruteforce'), np.str_('nmap_scan'), np.str_('stress_test')]
-- class counts: {np.str_('benign'): 829915, np.str_('hydra_bruteforce'): 36469, np.str_('nmap_scan'): 1680, np.str_('stress_test'): 42681}
+- class counts: {np.str_('benign'): 906652, np.str_('hydra_bruteforce'): 36469, np.str_('nmap_scan'): 2059, np.str_('stress_test'): 46224}
 
-- split: group  (train 733621 / test 177124)
+- split: group  (train 756674 / test 234730)
 - class-weight: sqrt
 
 ==================================================================
@@ -12,26 +12,26 @@
 ==================================================================
                   precision    recall  f1-score   support
 
-          benign     0.9973    0.9964    0.9968    162922
-hydra_bruteforce     0.9299    0.9542    0.9419      7442
-       nmap_scan     0.9544    0.9780    0.9661       364
-     stress_test     0.9918    0.9836    0.9877      6396
+          benign     0.9981    0.9958    0.9969    216534
+hydra_bruteforce     0.8965    0.9595    0.9269      7960
+       nmap_scan     0.9531    0.9355    0.9442       434
+     stress_test     0.9951    0.9895    0.9923      9802
 
-        accuracy                         0.9941    177124
-       macro avg     0.9684    0.9780    0.9731    177124
-    weighted avg     0.9942    0.9941    0.9941    177124
+        accuracy                         0.9942    234730
+       macro avg     0.9607    0.9701    0.9651    234730
+    weighted avg     0.9944    0.9942    0.9943    234730
 
-  overall accuracy   : 0.9941
-  balanced accuracy  : 0.9780   (macro-avg recall)
-  macro F1 (test)    : 0.9731
-  macro F1 (train)   : 0.9962   [train-test gap = +0.0230]
+  overall accuracy   : 0.9942
+  balanced accuracy  : 0.9701   (macro-avg recall)
+  macro F1 (test)    : 0.9651
+  macro F1 (train)   : 0.9944   [train-test gap = +0.0293]
 
   Confusion matrix (rows=true, cols=pred):
          benign  hydra_brut   nmap_scan  stress_tes
-    benign             162328         526          17          51
-    hydra_brutefor        340        7101           0           1
-    nmap_scan               4           4         356           0
-    stress_test           100           5           0        6291
+    benign             215623         854          12          45
+    hydra_brutefor        315        7638           6           1
+    nmap_scan              12          14         406           2
+    stress_test            87          14           2        9699
 
-**Best: Hist Gradient Boosting — macro-F1=0.9731, balanced-acc=0.9780, acc=0.9941**
+**Best: Hist Gradient Boosting — macro-F1=0.9651, balanced-acc=0.9701, acc=0.9942**
 Artifact: `models/multiclass/hgb_newdataset_4class.joblib`
