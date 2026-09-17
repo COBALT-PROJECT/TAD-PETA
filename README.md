@@ -23,11 +23,11 @@ graph TD
 
     subgraph TAD_Cluster ["TAD :8002 — Detection (tad_api.py)"]
         ING["/ingest/raw, /ingest"]
-        FEAT["Feature extraction\n30 features — 9 rolling stats\nover each src_ip's last 20 packets"]
-        MODEL["HGB model\ndefault: 4-class (post_exploitation dropped)\n--model: 5-class artifact also loads"]
+        FEAT["Feature extraction\n33 features: per-source rolling stats +\nper-pair flow (balance / reply-data / handshake)"]
+        MODEL["HGB model — sqrt class-weight\ndefault: 4-class (post_exploitation dropped)\n--model: 5-class artifact also loads"]
         GATE["Confidence gate\n--dispatch-min-confidence (0.7)"]
         VICTIM["Victim resolution (deterministic)\nscan/brute/DoS → destination\nHost_Compromise → internal source"]
-        GNN["GNN victim scorer — confirming only\nvictim_sage.pt, needs ≥10 attack pkts\nnever gates dispatch"]
+        GNN["GNN victim scorer\nvictim_sage.pt, needs ≥10 attack pkts\nconfirms + can VETO a wrong label"]
         SUSTAIN["Sustained-attack gate\n--sustain-min/-window (100 pkts/30s)\nblocks single misclassified packets"]
         DEDUP["Dispatch cooldown\n--dispatch-cooldown (30s) per (type,target)"]
         ACTIVE["GET /active\nlive attacks + GNN confidence"]
@@ -49,32 +49,36 @@ graph TD
     COL -->|"1. POST /ingest/raw"| ING --> FEAT --> MODEL
     MODEL -.->|"conf < threshold → LOW_CONF"| LOGS
     MODEL -->|"2. conf ≥ threshold"| VICTIM
-    VICTIM -.->|"confirming score"| GNN
+    VICTIM -.->|"external / unmanaged → ALERT_EXTERNAL"| LOGS
+    VICTIM -->|"3. managed asset"| GNN
     GNN -.-> ACTIVE
     GNN -.-> VICTIMS
-    VICTIM -.->|"external / unmanaged → ALERT_EXTERNAL"| LOGS
-    VICTIM -->|"3. managed asset"| SUSTAIN
+    GNN -.->|"gnn < 0.1 & has evidence → GNN_VETO"| LOGS
+    GNN -->|"4. victim confirmed"| SUSTAIN
     SUSTAIN -.->|"< volume threshold → unconfirmed"| LOGS
-    SUSTAIN -->|"4. crossed threshold"| DEDUP
+    SUSTAIN -->|"5. crossed threshold"| DEDUP
     DEDUP -.->|"repeat within cooldown → suppressed"| LOGS
     DEDUP --> ACTIVE
-    DEDUP -->|"5. new (attack_type,target)\nor cooldown expired"| API
-    API -->|"6. lookup mitigations"| MAP
-    API -->|"6. asset context"| TOPO
+    DEDUP -->|"6. new (attack_type,target)\nor cooldown expired"| API
+    API -->|"7. lookup mitigations"| MAP
+    API -->|"7. asset context"| TOPO
     MAP --> SCORE
     TOPO --> SCORE
-    SCORE -->|"7. best mitigation\n(checks upstream node if better)"| API
-    API -->|"8. threat model + mitigation plan"| OUT
+    SCORE -->|"8. best mitigation\n(checks upstream node if better)"| API
+    API -->|"9. threat model + mitigation plan"| OUT
 ```
 
 **The numbered path is the hot path** (packet → dispatch → mitigation); dotted lines are
 the side-effects and confirming signals around it:
 
 - **Confidence gate** — below `--dispatch-min-confidence`, logged as `LOW_CONF`, never dispatched.
-- **GNN victim scorer** — a *confirming* signal only (`victim_sage.pt`), scored once a
-  target has ≥10 attack packets; it never blocks or redirects dispatch, it just annotates
-  `/active` and ranks candidates on `/victims`. Detection/dispatch work identically if it
-  never loads.
+- **GNN victim scorer + veto** — the graph model (`victim_sage.pt`) scores each resolved
+  victim once it has ≥10 attack packets. It annotates `/active` / `/victims` (confirming),
+  **and** now *overrules* HGB: if it is confident the target is **not** a victim
+  (`gnn < --gnn-veto-threshold`, default 0.1) it suppresses the dispatch as `GNN_VETO`.
+  This catches HGB confidently mislabeling benign traffic to a non-victim host (e.g. K8s
+  monitoring chatter scored as a flood). Detection/dispatch still work if the GNN never
+  loads (`--no-gnn`, or `--gnn-veto-threshold 0` to keep it confirming-only).
 - **Sustained-attack gate** — a real flood crosses `--sustain-min` packets in
   `--sustain-window` seconds almost instantly; scattered false positives on benign
   background traffic don't. Below threshold → `unconfirmed`, not dispatched. This is what
@@ -83,6 +87,13 @@ the side-effects and confirming signals around it:
   ever acts on assets in the topology.
 - **Cooldown dedup** — a repeat within `--dispatch-cooldown` is folded into `suppressed`
   instead of re-calling PETA — see *Dispatch de-duplication*.
+
+Together these four gates defend in depth: the **sqrt-weighted 33-feature model** (the
+per-pair *balance / reply-data / handshake* features tell a one-way flood from a two-way
+service conversation) misclassifies far less benign traffic up front; the **confidence**
+and **sustained-volume** gates drop scattered noise; and the **GNN veto** catches the
+dense chatter that slips past the volume gate. On a live capture this took a noisy target
+from ~14% dispatch precision to **0 false positives**.
 
 No SDT / Eclipse Ditto anywhere in this loop: topology comes from the local
 `ncsrd_topology_peta.json`, and delivery of the finished threat model is a plain optional
@@ -235,7 +246,8 @@ Contexts: `Frontend`, `Database`, `Compute`, `Identity`, `Security`.
 | `--dispatch-min-confidence` | 0.7 | don't fire a mitigation below this confidence; detection still logged as `LOW_CONF` (alert-only) |
 | `--sustain-min` | 100 | packets required for one `(attack_type, victim)` within `--sustain-window` before it may ever dispatch; `0` disables (back to per-packet). Below it → `unconfirmed` |
 | `--sustain-window` | 30 | rolling window (seconds) for `--sustain-min` |
-| `--gnn-model` | `TAD/models/gnn/victim_sage.pt` | confirming-only victim-ID model; detection/dispatch work identically if it fails to load |
+| `--gnn-model` | `TAD/models/gnn/victim_sage.pt` | victim-ID GNN; detection/dispatch work identically if it fails to load |
+| `--gnn-veto-threshold` | 0.1 | GNN veto: suppress a dispatch (as `GNN_VETO`) when the GNN has evidence and scores the target below this (confident it is **not** a victim). `0` = confirming-only |
 | `--no-gnn` | off | disable the GNN scorer even if `--gnn-model` exists |
 | `--active-timeout` | 60 | seconds of silence before an attack drops off `/active` (its end time) |
 | `--topology-file` | `PETA/ncsrd_topology_peta.json` | asset topology (SDT not used) |
@@ -262,7 +274,7 @@ Contexts: `Frontend`, `Database`, `Compute`, `Identity`, `Security`.
 | `GET /active` | **attacks happening now** — one row per `(attack_type, target)`, deduped |
 | `GET /victims` | GNN-only victim-confidence ranking across every host with attack traffic this run — `503` if the GNN model never loaded |
 | `GET /health` | model, classes, active sources, batch limits, cooldown, sustain-gate and GNN-loaded status |
-| `GET /stats` | counters incl. `dispatched` / `suppressed` / `unconfirmed` / `external` / `low_confidence` |
+| `GET /stats` | counters incl. `dispatched` / `suppressed` / `unconfirmed` / `gnn_vetoed` / `external` / `low_confidence` |
 | `POST /reset` | clear per-source state and the live-attack table (GNN model itself stays loaded) |
 
 `GET /active` is the real-time view — each entry carries `started`, `ongoing_seconds`,
@@ -316,14 +328,21 @@ attacker). If the resolved victim isn't a managed asset in the topology
 `ALERT_EXTERNAL` and counted as `external` — so PETA only ever acts on machines
 you own. It no longer silently blames the first node in the topology file.
 
-### Victim confirmation (GNN)
+### Victim confirmation + veto (GNN)
 
 `train_gnn_victim.py` produces `TAD/models/gnn/victim_sage.pt`, a graph-neural-network
-scorer TAD loads alongside the HGB classifier. It is **confirming-only** — deterministic
-resolution above always decides who gets mitigated; the GNN never gates, blocks, or
-redirects a dispatch, and everything works identically if it fails to load
-(`--no-gnn`, or just delete the file).
+scorer TAD loads alongside the HGB classifier. Deterministic resolution above always
+decides *who* gets mitigated; the GNN then (a) **confirms** — annotates `/active` and
+ranks `/victims` — and (b) **vetoes**: when it has evidence and is confident the resolved
+target is *not* a victim (`gnn < --gnn-veto-threshold`, default 0.1), it suppresses the
+dispatch as `GNN_VETO`. Everything still works if it fails to load (`--no-gnn`, or delete
+the file); `--gnn-veto-threshold 0` keeps it confirming-only.
 
+- **Why the veto matters:** HGB can be *confidently wrong* on dense benign traffic — e.g.
+  K8s monitoring chatter (host 123↔125) scored as a stress flood at 0.7–0.99 confidence,
+  enough to clear both the confidence and sustained-volume gates. The GNN sees those hosts
+  aren't under attack (score ~0.07) and blocks them. On a live run this suppressed 15
+  such false dispatches while leaving the real victim (scored ~1.0) untouched.
 - Scores a target once it has **≥10 attack packets** seen this run
   (`MIN_RELIABLE_ATTACK_PKTS`) — too little evidence before that.
 - Attached to `/active` as `gnn_victim_confidence`, and separately rankable on
