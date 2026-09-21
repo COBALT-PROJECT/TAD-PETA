@@ -32,6 +32,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TARGET_HOSTS = [
     ("10.163.1.103", "ncsrd-datalake",   "Data-Lake",               "Database", 9,  "VM 1160 — data lake store",        [5432, 9000, 22]),
     ("10.163.1.118", "ncsrd-toe",        "ai-target-of-evaluation", "Frontend", 7,  "VM 1158 — AI target of evaluation",[80, 443, 8080, 22]),
+    ("10.163.1.137", "ncsrd-toe-quantum","quantum-target-of-evaluation","Frontend",7,"Quantum target of evaluation",     [80, 443, 8080, 22]),
     ("10.163.1.120", "ncsrd-iam",        "iam",                     "Identity", 10, "VM 1155 — identity & access mgmt", [389, 636, 8443, 22]),
     ("10.163.1.121", "ncsrd-worker3",    "Worker3",                 "Compute",  6,  "VM 1124 — K3s worker 3",           [10250, 30000, 22]),
     ("10.163.1.122", "ncsrd-sdtm",       "sdtm",                    "Security", 8,  "VM 1089 — SDT manager",            [8001, 22]),
@@ -57,6 +58,8 @@ TARGET_HOSTS = [
 LINKS = [
     ("ncsrd-toe",         "ncsrd-datalake"),
     ("ncsrd-toe",         "ncsrd-iam"),
+    ("ncsrd-toe-quantum", "ncsrd-iam"),
+    ("ncsrd-toe-quantum", "ncsrd-k3s-master"),
     ("ncsrd-cobalt",      "ncsrd-cobalt-dlt"),
     ("ncsrd-cobalt",      "ncsrd-iam"),
     ("ncsrd-ccmui",       "ncsrd-ccm-manager"),

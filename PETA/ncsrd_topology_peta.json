@@ -29,6 +29,20 @@
         ]
       },
       {
+        "id": "ncsrd-toe-quantum",
+        "name": "quantum-target-of-evaluation",
+        "type": "Frontend",
+        "criticality": 7,
+        "role": "Quantum target of evaluation",
+        "ip": "10.163.1.137",
+        "open_ports": [
+          80,
+          443,
+          8080,
+          22
+        ]
+      },
+      {
         "id": "ncsrd-iam",
         "name": "iam",
         "type": "Identity",
@@ -246,6 +260,14 @@
       {
         "source": "ncsrd-toe",
         "target": "ncsrd-iam"
+      },
+      {
+        "source": "ncsrd-toe-quantum",
+        "target": "ncsrd-iam"
+      },
+      {
+        "source": "ncsrd-toe-quantum",
+        "target": "ncsrd-k3s-master"
       },
       {
         "source": "ncsrd-cobalt",
