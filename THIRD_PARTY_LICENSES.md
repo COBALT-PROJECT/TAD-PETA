@@ -1,8 +1,9 @@
 # Third-Party Licenses
 
-TAD-PETA is licensed under the MIT License (see `LICENSE`). This file lists
-the licenses of third-party dependencies actually imported by code tracked in
-this branch, verified directly from each package's own metadata/pyproject.
+TAD-PETA is licensed under the Apache License, Version 2.0 (see `LICENSE`).
+This file lists the licenses of third-party dependencies actually imported by
+code tracked in this branch, verified directly from each package's own
+metadata/pyproject.
 
 | Package | License |
 |---|---|
@@ -20,8 +21,8 @@ this branch, verified directly from each package's own metadata/pyproject.
 | torch-geometric | MIT |
 | uvicorn | BSD-3-Clause |
 
-All of the above are permissive licenses, compatible with this project's MIT
-license.
+All of the above are permissive licenses, compatible with this project's
+Apache-2.0 license.
 
 ## Note: a GPL dependency exists, but is not shipped in this repo
 
