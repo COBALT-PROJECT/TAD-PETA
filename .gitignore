@@ -156,6 +156,10 @@ TAD/data/
 TAD/models
 TAD/scripts
 
+# Attack scripts, wordlists, captures, timing runs -- mixes real code with
+# regenerated run artifacts and has held plaintext creds before.
+data_collection/
+
 # Project-local docs and logs
 CLAUDE.md
 *.txt
