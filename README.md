@@ -131,3 +131,11 @@ A key design property of this pipeline is that the Digital Twin acts as **shared
 - **[TAD Guide](./TAD/README.md)**: Data collection, feature extraction, and ML model training.
 - **[PETA Guide](./PETA/README.md)**: Scoring engine, graph traversal, and mitigation mapping.
 
+
+---
+
+![Horizon-Cobalt Project](./assets/horizon-cobalt-logo.png)
+
+This project has received funding from the European Union’s Horizon 2020 research and innovation programme under grant agreement No. 101119602.
+
+![European Union](https://upload.wikimedia.org/wikipedia/commons/b/b7/Flag_of_Europe.svg)
