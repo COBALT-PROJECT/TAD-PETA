@@ -424,3 +424,13 @@ traffic `lag` ≈ 0 and rising lag is your early warning that TAD is falling beh
   theoretical one. More host diversity in training data is the open fix; see
   `HANDOFF.md` for status. Until then, treat detections on hosts outside the training
   set's victims with extra scrutiny.
+
+
+---
+
+![Horizon-Cobalt Project](./assets/horizon-cobalt-logo.png)
+
+This project has received funding from the European Union’s Horizon 2020 research and innovation programme under grant agreement No. 101119602.
+
+![European Union](https://upload.wikimedia.org/wikipedia/commons/b/b7/Flag_of_Europe.svg)
+
