@@ -428,9 +428,15 @@ traffic `lag` ≈ 0 and rising lag is your early warning that TAD is falling beh
 
 ---
 
-![Horizon-Cobalt Project](./assets/horizon-cobalt-logo.png)
+<p align="center">
+  <img src="Horizon-cobalt-logo.jpeg" alt="Horizon COBALT Project logo" width="320">
+</p>
 
-This project has received funding from the European Union’s Horizon 2020 research and innovation programme under grant agreement No. 101119602.
+<p align="center">
+  This project has received funding from the European Union’s Horizon 2020 research and innovation programme under grant agreement No. 101119602.
+</p>
 
-![European Union](https://upload.wikimedia.org/wikipedia/commons/b/b7/Flag_of_Europe.svg)
+<p align="center">
+  <img src="https://upload.wikimedia.org/wikipedia/commons/b/b7/Flag_of_Europe.svg" alt="European Union flag" width="60">
+</p>
 
