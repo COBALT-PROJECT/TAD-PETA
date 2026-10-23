@@ -135,9 +135,13 @@ A key design property of this pipeline is that the Digital Twin acts as **shared
 ---
 
 <p align="center">
-  <img src="https://horizon-cobalt.eu/wp-content/uploads/2023/11/COBALT-Final-logo-white-1024x300.png" alt="COBALT Project logo" width="320">
+  <img src="Horizon-cobalt-logo.jpeg" alt="Horizon COBALT Project logo" width="320">
 </p>
 
-This project has received funding from the European Union’s Horizon 2020 research and innovation programme under grant agreement No. 101119602.
+<p align="center">
+  This project has received funding from the European Union’s Horizon 2020 research and innovation programme under grant agreement No. 101119602.
+</p>
 
-![European Union](https://upload.wikimedia.org/wikipedia/commons/b/b7/Flag_of_Europe.svg)
+<p align="center">
+  <img src="https://upload.wikimedia.org/wikipedia/commons/b/b7/Flag_of_Europe.svg" alt="European Union flag" width="60">
+</p>
